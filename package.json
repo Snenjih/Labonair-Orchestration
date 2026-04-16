@@ -42,6 +42,16 @@
       {
         "command": "labonair.action.focusSession",
         "title": "Focus Agent Session"
+      },
+      {
+        "command": "labonair.action.deleteSession",
+        "title": "Delete Session",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "labonair.action.renameSession",
+        "title": "Rename Session",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
@@ -50,6 +60,18 @@
           "command": "labonair.action.newAgentSession",
           "when": "view == labonair.views.agentSessions",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "labonair.action.renameSession",
+          "when": "view == labonair.views.agentSessions && viewItem == labonair.session",
+          "group": "inline@1"
+        },
+        {
+          "command": "labonair.action.deleteSession",
+          "when": "view == labonair.views.agentSessions && viewItem == labonair.session",
+          "group": "inline@2"
         }
       ]
     }

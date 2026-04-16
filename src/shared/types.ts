@@ -6,3 +6,5 @@ export type ParsedEvent =
   | { type: 'tool_call_output'; output: string }
   | { type: 'tool_call_end'; status: 'completed' | 'failed' }
   | { type: 'permission_request'; action: string; context: string };
+
+export type SessionStatus = 'idle' | 'working' | 'permission_required' | 'finished' | 'error';

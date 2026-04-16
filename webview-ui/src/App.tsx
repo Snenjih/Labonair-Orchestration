@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { vscode } from './utils/vscode';
 import { ParsedEvent } from './types';
 import AgentStreamView from './components/AgentStreamView';
 import AgentFormDropdowns from './components/AgentFormDropdowns';
 import MessageInput from './components/MessageInput';
+import TerminalEmulator, { TerminalEmulatorHandle } from './components/TerminalEmulator';
+import ViewToggles, { ViewMode } from './components/ViewToggles';
 
 interface SessionMeta {
   sessionId: string;
@@ -17,6 +19,9 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const [selectedEffort, setSelectedEffort] = useState('standard');
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('ui');
+
+  const terminalRef = useRef<TerminalEmulatorHandle>(null);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -27,9 +32,16 @@ export default function App() {
           if (Array.isArray(message.payload.history)) {
             setHistory(message.payload.history as ParsedEvent[]);
           }
+          // Replay raw terminal history
+          if (message.payload.rawBuffer) {
+            terminalRef.current?.writeOutput(message.payload.rawBuffer);
+          }
           break;
         case 'parsed_event':
           setHistory(h => [...h, message.payload as ParsedEvent]);
+          break;
+        case 'raw_output':
+          terminalRef.current?.writeOutput(message.payload as string);
           break;
         case 'file_suggestions':
           setFileSuggestions(message.payload as string[]);
@@ -45,7 +57,6 @@ export default function App() {
   }, []);
 
   function handlePermissionRespond(index: number, allowed: boolean) {
-    // Dismiss the card immediately to prevent duplicate clicks
     setDismissedPermissions(prev => new Set(prev).add(index));
     vscode.postMessage({ type: 'respondToPermission', allowed });
   }
@@ -59,13 +70,29 @@ export default function App() {
     setFileSuggestions([]);
   }
 
+  const showUi = viewMode === 'ui' || viewMode === 'split';
+  const showTerminal = viewMode === 'terminal' || viewMode === 'split';
+
   return (
     <div className="app">
-      <AgentStreamView
-        history={history}
-        dismissedPermissions={dismissedPermissions}
-        onPermissionRespond={handlePermissionRespond}
-      />
+      <header className="app-header">
+        <span className="app-header__title">
+          {session ? `Session ${session.sessionId.slice(0, 6)}` : 'Loading…'}
+        </span>
+        <ViewToggles mode={viewMode} onChangeViewMode={setViewMode} />
+      </header>
+
+      <div className={`app-content app-content--${viewMode}`}>
+        {/* Always mounted so xterm canvas is never destroyed; hidden via CSS */}
+        <AgentStreamView
+          history={history}
+          dismissedPermissions={dismissedPermissions}
+          onPermissionRespond={handlePermissionRespond}
+          hidden={!showUi}
+        />
+        <TerminalEmulator ref={terminalRef} hidden={!showTerminal} />
+      </div>
+
       <div className="footer">
         <AgentFormDropdowns
           selectedModel={selectedModel}

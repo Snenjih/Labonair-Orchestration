@@ -7,6 +7,11 @@ export class ChatPanelProvider {
   private readonly panel: vscode.WebviewPanel;
   private readonly sessionId: string;
   private readonly sessionManager: SessionManager;
+  private readonly subscriptions: vscode.Disposable[] = [];
+
+  public get isVisible(): boolean {
+    return this.panel.visible;
+  }
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, sessionId: string, sessionManager: SessionManager) {
     this.panel = panel;
@@ -15,14 +20,35 @@ export class ChatPanelProvider {
 
     this.panel.webview.html = this._buildHtml(extensionUri);
 
+    // Forward parsed events for this session to the webview in real-time
+    this.subscriptions.push(
+      sessionManager.onParsedEvent(({ id, event }) => {
+        if (id === sessionId) {
+          this.panel.webview.postMessage({ type: 'parsed_event', payload: event });
+        }
+      }),
+      sessionManager.onRawOutput(({ id, data }) => {
+        if (id === sessionId) {
+          this.panel.webview.postMessage({ type: 'raw_output', payload: data });
+        }
+      })
+    );
+
     this.panel.webview.onDidReceiveMessage(async (message) => {
       switch (message.type) {
-        case 'requestInitialState':
+        case 'requestInitialState': {
+          const state = this.sessionManager.getSessionState(this.sessionId);
           this.panel.webview.postMessage({
             type: 'initialState',
-            payload: { sessionId: this.sessionId, status: 'idle' }
+            payload: {
+              sessionId: this.sessionId,
+              status: state?.status ?? 'idle',
+              history: state?.history ?? [],
+              rawBuffer: state?.rawBuffer ?? '',
+            }
           });
           break;
+        }
 
         case 'requestFileSuggestions': {
           const folders = vscode.workspace.workspaceFolders;
@@ -51,6 +77,7 @@ export class ChatPanelProvider {
 
     this.panel.onDidDispose(() => {
       ChatPanelProvider.currentPanels.delete(this.sessionId);
+      this.subscriptions.forEach(d => d.dispose());
     });
   }
 

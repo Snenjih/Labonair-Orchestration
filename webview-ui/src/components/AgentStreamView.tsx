@@ -52,9 +52,10 @@ interface Props {
   history: ParsedEvent[];
   dismissedPermissions: Set<number>;
   onPermissionRespond: (index: number, allowed: boolean) => void;
+  hidden?: boolean;
 }
 
-export default function AgentStreamView({ history, dismissedPermissions, onPermissionRespond }: Props) {
+export default function AgentStreamView({ history, dismissedPermissions, onPermissionRespond, hidden }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,7 +65,7 @@ export default function AgentStreamView({ history, dismissedPermissions, onPermi
   const items = buildDisplayItems(history);
 
   return (
-    <div className="stream-view">
+    <div className="stream-view" style={hidden ? { display: 'none' } : undefined}>
       {items.map(item => {
         if (item.kind === 'tool_call') {
           return (
