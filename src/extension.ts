@@ -13,11 +13,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('labonair.action.newAgentSession', () => {
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const sessionId = sessionManager.createSession(cwd);
-      ChatPanelProvider.createOrShow(context.extensionUri, sessionId);
+      ChatPanelProvider.createOrShow(context.extensionUri, sessionId, sessionManager);
     }),
 
     vscode.commands.registerCommand('labonair.action.focusSession', (sessionId: string) => {
-      ChatPanelProvider.createOrShow(context.extensionUri, sessionId);
+      ChatPanelProvider.createOrShow(context.extensionUri, sessionId, sessionManager);
     })
   );
 }

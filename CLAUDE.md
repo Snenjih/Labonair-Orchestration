@@ -1,5 +1,12 @@
 # Labonair AI Core — Claude Code Instructions
 
+## 📌 STARTUP PROTOCOL
+**At the start of every new chat, read these files in order:**
+1. `@project-information/context.md` — Architectural boundaries, strict limitations, core components
+2. `@project-information/prd.md` — Product vision, requirements, technical constraints
+
+These files are the source of truth for this project. Always refer back to them when in doubt.
+
 ## Project Overview
 Labonair is a "Zen-Mode First" hard-fork of VS Code. This repo orchestrates the `labonair-ai-core` built-in extension: a "Mission Control" that wraps the `claude` CLI via `node-pty`, presenting it through a React Webview with a native TreeView sidebar.
 
@@ -12,9 +19,16 @@ Labonair is a "Zen-Mode First" hard-fork of VS Code. This repo orchestrates the 
   src/
     extension.ts          — Activation entry point; registers commands & providers
     SessionManager.ts     — Singleton Map<SessionId, SessionState>; EventEmitter for sidebar refresh
-    ChatPanelProvider.ts  — Webview panel lifecycle; static Map of open panels
+    ChatPanelProvider.ts  — Webview panel lifecycle; loads Vite assets; RPC routing
     SidebarProvider.ts    — TreeDataProvider; reflects SessionManager state
-  out/                    — Compiled JS (tsc output)
+  webview-ui/             — Vite + React source (compiled → dist/webview/)
+    src/
+      App.tsx             — Root component; handles RPC messages from host
+      main.tsx            — React entry point (createRoot)
+      utils/vscode.ts     — acquireVsCodeApi singleton wrapper
+    vite.config.ts        — Outputs to ../dist/webview/assets/
+  dist/webview/           — Built React assets (gitignored)
+  out/                    — Compiled extension JS (tsc output)
 ```
 
 ## Critical Rules
@@ -24,9 +38,10 @@ Labonair is a "Zen-Mode First" hard-fork of VS Code. This repo orchestrates the 
 - **Frontend ↔ Backend** communication via `postMessage` only — never import Node.js modules in the webview.
 
 ## Current Phase
-**Phase 1 — Extension Foundation**
-- Subphase 1.1 (Scaffolding): ✅ COMPLETE
-- Subphase 1.2 (PTY Spawner — `ClaudeProcess.ts`): ✅ COMPLETE
+**Phase 3 — React Webview**
+- Phase 1.1 (Scaffolding): ✅ COMPLETE
+- Phase 1.2 (PTY Spawner — `ClaudeProcess.ts`): ✅ COMPLETE
+- Phase 3.1 (React Webview Scaffolding & RPC): ✅ COMPLETE
 
 ## Key Technologies
 - TypeScript, VS Code Extension API

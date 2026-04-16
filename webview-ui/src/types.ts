@@ -1,3 +1,4 @@
+// Mirrors src/shared/types.ts — kept in sync manually; never import Node modules here.
 export type ParsedEvent =
   | { type: 'user_message'; text: string }
   | { type: 'agent_message'; text: string }
