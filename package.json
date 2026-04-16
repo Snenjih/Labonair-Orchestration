@@ -1,0 +1,62 @@
+{
+  "name": "labonair-ai-core",
+  "displayName": "Labonair AI Core",
+  "description": "Mission Control for Claude Code CLI — session management, webview chat, and background agent persistence.",
+  "version": "0.0.1",
+  "publisher": "labonair",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onView:labonair.views.agentSessions",
+    "onCommand:labonair.action.newAgentSession"
+  ],
+  "main": "./out/extension.js",
+  "dependencies": {
+    "node-pty": "^1.0.0"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "labonair-ai-container",
+          "title": "Sessions",
+          "icon": "$(hub)"
+        }
+      ]
+    },
+    "views": {
+      "labonair-ai-container": [
+        {
+          "id": "labonair.views.agentSessions",
+          "name": "Active Sessions"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "labonair.action.newAgentSession",
+        "title": "New Agent Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "labonair.action.focusSession",
+        "title": "Focus Agent Session"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "labonair.action.newAgentSession",
+          "when": "view == labonair.views.agentSessions",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/vscode": "^1.116.0",
+    "typescript": "^6.0.2"
+  }
+}
