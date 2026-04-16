@@ -49,13 +49,17 @@ export default function MessageInput({ fileSuggestions, onSubmit }: Props) {
     const cursor = el?.selectionStart ?? text.length;
     const before = text.slice(0, cursor);
     const after = text.slice(cursor);
-    const replaced = before.replace(MENTION_RE, (_, _q, offset, str) => {
-      // preserve leading whitespace/newline before @
-      const prefix = str.slice(offset, offset + (str.length - _q.length - 1) - (str.length - before.length));
-      const ws = before.match(/(?:^|\s)@/)?.[0].slice(0, -1) ?? '';
-      return ws + `"${suggestion}"`;
-    });
-    setText(replaced + after);
+
+    // Find where the @token starts (the @ character itself)
+    const match = before.match(MENTION_RE);
+    if (!match) { return; }
+    const atIndex = before.lastIndexOf('@');
+    const leadingSpace = atIndex > 0 && /\s/.test(before[atIndex - 1]) ? before[atIndex - 1] : '';
+    const newBefore = before.slice(0, atIndex > 0 && leadingSpace ? atIndex - 1 : atIndex)
+      + (leadingSpace || '')
+      + `"${suggestion}"`;
+
+    setText(newBefore + after);
     setMentionQuery(null);
     setTimeout(() => {
       resizeTextarea();

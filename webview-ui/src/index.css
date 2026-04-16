@@ -1,0 +1,439 @@
+/* ============================================================
+   Labonair AI Core — Webview Stylesheet
+   Uses VS Code CSS variables for theme compatibility.
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --radius: 6px;
+  --gap: 8px;
+  --font-mono: var(--vscode-editor-font-family, "Cascadia Code", "Fira Code", monospace);
+}
+
+body {
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── App shell ────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-titleBar-activeBackground, var(--vscode-editor-background));
+  flex-shrink: 0;
+}
+
+.app-header__title {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Content area (chat / terminal / split) ───────────────── */
+
+.app-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-content--ui,
+.app-content--terminal {
+  flex-direction: column;
+}
+
+.app-content--split {
+  flex-direction: column;
+}
+
+.app-content--split .stream-view {
+  flex: 1;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.app-content--split .terminal-container {
+  flex: 1;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+
+.footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* ── View toggles ─────────────────────────────────────────── */
+
+.view-toggles {
+  display: flex;
+  gap: 2px;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.05));
+  border-radius: var(--radius);
+  padding: 2px;
+}
+
+.view-toggle-btn {
+  padding: 3px 10px;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.view-toggle-btn:hover { opacity: 1; }
+
+.view-toggle-btn--active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  opacity: 1;
+}
+
+/* ── Stream view ──────────────────────────────────────────── */
+
+.stream-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+
+/* ── Messages ─────────────────────────────────────────────── */
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.msg--user {
+  align-items: flex-end;
+}
+
+.msg__bubble {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  padding: 8px 12px;
+  border-radius: var(--radius) var(--radius) 2px var(--radius);
+  max-width: 80%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.msg--assistant {
+  align-items: flex-start;
+}
+
+.msg--assistant p {
+  line-height: 1.65;
+  margin-bottom: 8px;
+}
+
+.msg--assistant p:last-child { margin-bottom: 0; }
+
+.msg--assistant pre {
+  margin: 8px 0;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  background: var(--vscode-textCodeBlock-background, #1e1e1e) !important;
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.msg--assistant pre code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 12px 14px;
+  display: block;
+}
+
+.inline-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--vscode-textCodeBlock-background, rgba(255,255,255,0.07));
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ── Thought item ─────────────────────────────────────────── */
+
+.thought {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.thought__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--vscode-sideBar-background, rgba(255,255,255,0.03));
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.thought__header:disabled { cursor: default; }
+.thought__icon { opacity: 0.6; }
+
+.thought__body {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  white-space: pre-wrap;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+/* ── Tool call ────────────────────────────────────────────── */
+
+.tool {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.tool--completed { border-color: rgba(78, 201, 176, 0.35); }
+.tool--failed    { border-color: rgba(241, 76, 76, 0.35); }
+
+.tool__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--vscode-sideBar-background, rgba(255,255,255,0.03));
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  width: 100%;
+  text-align: left;
+}
+
+.tool__icon { opacity: 0.55; flex-shrink: 0; }
+.tool__name { font-weight: 600; }
+.tool__args {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.tool__spacer { flex: 1; }
+
+.tool__status { flex-shrink: 0; }
+.tool__status--ok  { color: #4ec9b0; }
+.tool__status--err { color: #f14c4c; }
+
+.tool__body {
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-textCodeBlock-background, #1e1e1e);
+}
+
+.tool__body pre {
+  padding: 10px 12px;
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tool__body pre code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--vscode-foreground);
+}
+
+/* ── Permission card ──────────────────────────────────────── */
+
+.perm-card {
+  border: 1px solid rgba(255, 193, 7, 0.5);
+  border-radius: var(--radius);
+  background: rgba(255, 193, 7, 0.06);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.perm-card__header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #ffc107;
+}
+
+.perm-card__action {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.perm-card__context {
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: pre-wrap;
+}
+
+.perm-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+
+.btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn:hover { opacity: 0.85; }
+
+.btn--accept {
+  background: #4ec9b0;
+  color: #000;
+}
+
+.btn--deny {
+  background: #f14c4c;
+  color: #fff;
+}
+
+/* ── Input area ───────────────────────────────────────────── */
+
+.dropdowns {
+  display: flex;
+  gap: 6px;
+}
+
+.dropdowns select {
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-wrapper textarea {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.5;
+  outline: none;
+  width: 100%;
+  min-height: 38px;
+}
+
+.input-wrapper textarea:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.mention-list {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: var(--radius);
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.mention-list li {
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mention-list li:hover,
+.mention-list li.focused {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* ── Terminal container ───────────────────────────────────── */
+
+.terminal-container {
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  background: #1e1e1e;
+}
+
+/* ── Spinner animation ────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}

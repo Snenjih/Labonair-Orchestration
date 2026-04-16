@@ -7,10 +7,6 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "activationEvents": [
-    "onView:labonair.views.agentSessions",
-    "onCommand:labonair.action.newAgentSession"
-  ],
   "main": "./out/extension.js",
   "dependencies": {
     "node-pty": "^1.0.0"

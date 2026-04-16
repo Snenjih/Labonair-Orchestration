@@ -5,6 +5,7 @@ import { PtyParser } from './parser/PtyParser';
 
 export class ClaudeProcess {
   private ptyProcess: pty.IPty;
+  private currentModel: string = '';
 
   private _onData = new vscode.EventEmitter<string>();
   public readonly onData = this._onData.event;
@@ -17,7 +18,7 @@ export class ClaudeProcess {
 
     this.ptyProcess = pty.spawn(shell, args, {
       name: 'xterm-256color',
-      cols: 80,
+      cols: 120,
       rows: 30,
       cwd,
       env: process.env as Record<string, string>,
@@ -31,6 +32,17 @@ export class ClaudeProcess {
 
   write(data: string): void {
     this.ptyProcess.write(data);
+  }
+
+  /**
+   * Switch the active model mid-session using Claude Code's /model slash-command.
+   * Only sends the command if the model actually changed.
+   */
+  setModel(model: string): void {
+    if (model && model !== this.currentModel) {
+      this.currentModel = model;
+      this.ptyProcess.write(`/model ${model}\r`);
+    }
   }
 
   public respondToPermission(allowed: boolean): void {

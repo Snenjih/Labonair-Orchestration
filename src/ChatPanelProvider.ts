@@ -61,9 +61,12 @@ export class ChatPanelProvider {
         }
 
         case 'submit': {
-          const { text } = message.payload as { text: string; config: { model: string; effort: string } };
+          const { text, config } = message.payload as { text: string; config: { model: string; effort: string } };
           const claudeProcess = this.sessionManager.getSession(this.sessionId);
-          claudeProcess?.write(text + '\r');
+          if (claudeProcess) {
+            if (config?.model) { claudeProcess.setModel(config.model); }
+            claudeProcess.write(text + '\r');
+          }
           break;
         }
 

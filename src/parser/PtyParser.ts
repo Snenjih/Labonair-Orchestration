@@ -2,9 +2,15 @@ import * as vscode from 'vscode';
 import { ParsedEvent } from '../shared/types';
 import { stripAnsi } from './ansi-utils';
 
+// Claude Code's interactive prompt line after a completed turn.
+// Matches lines like "❯ " or "> " that appear when the CLI is idle again.
+const PROMPT_RE = /(?:^|\n)[❯>$]\s*$/;
+
 export class PtyParser {
   private buffer: string = '';
   private isAwaitingPermission: boolean = false;
+  private hasEmittedMessage: boolean = false;
+
   private _onParsedEvent = new vscode.EventEmitter<ParsedEvent>();
   public readonly onParsedEvent = this._onParsedEvent.event;
 
@@ -30,8 +36,18 @@ export class PtyParser {
       return;
     }
 
-    // Suppress further parsing while waiting for user response
-    if (this.isAwaitingPermission) {
+    if (this.isAwaitingPermission) { return; }
+
+    // Session finished: CLI returned to its idle prompt after emitting content
+    if (this.hasEmittedMessage && PROMPT_RE.test(clean)) {
+      // Flush any remaining text before the prompt as a final message
+      const beforePrompt = clean.replace(PROMPT_RE, '').trim();
+      if (beforePrompt) {
+        this._onParsedEvent.fire({ type: 'agent_message', text: beforePrompt });
+      }
+      this._onParsedEvent.fire({ type: 'session_finished' });
+      this.buffer = '';
+      this.hasEmittedMessage = false;
       return;
     }
 
@@ -39,6 +55,7 @@ export class PtyParser {
     const thinkMatch = clean.match(/Thinking\.\.\.\n/);
     if (thinkMatch) {
       this._onParsedEvent.fire({ type: 'thought', status: 'loading', text: 'Thinking...' });
+      this.hasEmittedMessage = true;
       this.consume(thinkMatch[0]);
       return this.flush();
     }
@@ -48,11 +65,12 @@ export class PtyParser {
     if (toolStartMatch) {
       const args = toolStartMatch[2].trim();
       this._onParsedEvent.fire({ type: 'tool_call_start', toolName: toolStartMatch[1], ...(args ? { args } : {}) });
+      this.hasEmittedMessage = true;
       this.consume(toolStartMatch[0]);
       return this.flush();
     }
 
-    // Tool output: "Tool output:\n<text>\n"
+    // Tool output: "Tool output:\n<text>\n\n"
     const toolOutMatch = clean.match(/Tool output:\s*\n([\s\S]*?\n)\n/);
     if (toolOutMatch) {
       this._onParsedEvent.fire({ type: 'tool_call_output', output: toolOutMatch[1].trim() });
@@ -74,22 +92,22 @@ export class PtyParser {
       const text = clean.slice(0, newline + 1);
       if (text.trim()) {
         this._onParsedEvent.fire({ type: 'agent_message', text: text.trimEnd() });
+        this.hasEmittedMessage = true;
       }
-      // Advance buffer by the raw length corresponding to cleaned text
-      this.buffer = stripAnsi(this.buffer).slice(newline + 1);
+      // Advance raw buffer past the consumed clean text
+      this.buffer = this.advanceBuffer(this.buffer, newline + 1);
     }
   }
 
-  /** Consume `matchedCleanText` from buffer by matching raw bytes. */
-  private consume(matchedCleanText: string): void {
-    const idx = stripAnsi(this.buffer).indexOf(matchedCleanText);
-    if (idx === -1) { return; }
-    // Walk raw buffer counting clean chars
+  /**
+   * Advance `raw` by exactly `cleanChars` visible characters,
+   * skipping ANSI escape sequences (which have zero visible width).
+   */
+  private advanceBuffer(raw: string, cleanChars: number): string {
     let cleanCount = 0;
     let rawIdx = 0;
-    const raw = this.buffer;
-    while (rawIdx < raw.length && cleanCount < idx + matchedCleanText.length) {
-      const ansiMatch = raw.slice(rawIdx).match(/^[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/);
+    while (rawIdx < raw.length && cleanCount < cleanChars) {
+      const ansiMatch = raw.slice(rawIdx).match(/^[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/);
       if (ansiMatch) {
         rawIdx += ansiMatch[0].length;
       } else {
@@ -97,7 +115,14 @@ export class PtyParser {
         rawIdx++;
       }
     }
-    this.buffer = raw.slice(rawIdx);
+    return raw.slice(rawIdx);
+  }
+
+  /** Consume `matchedCleanText` from the raw buffer. */
+  private consume(matchedCleanText: string): void {
+    const idx = stripAnsi(this.buffer).indexOf(matchedCleanText);
+    if (idx === -1) { return; }
+    this.buffer = this.advanceBuffer(this.buffer, idx + matchedCleanText.length);
   }
 
   dispose(): void {

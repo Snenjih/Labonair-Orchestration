@@ -55,6 +55,8 @@ export class SessionManager {
       const prevStatus = state.status;
       if (event.type === 'permission_request') {
         state.status = 'permission_required';
+      } else if (event.type === 'session_finished') {
+        state.status = 'finished';
       } else if (event.type === 'agent_message' || event.type === 'thought' || event.type === 'tool_call_start') {
         state.status = 'working';
       } else if (event.type === 'tool_call_end' && event.status === 'failed') {
