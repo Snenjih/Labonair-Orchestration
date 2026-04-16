@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { ClaudeProcess } from './ClaudeProcess';
 import { ParsedEvent, SessionStatus } from './shared/types';
-import { ChatPanelProvider } from './ChatPanelProvider';
 
 export interface SessionState {
   process: ClaudeProcess;
@@ -14,6 +13,12 @@ export interface SessionState {
 
 export class SessionManager {
   private sessions = new Map<string, SessionState>();
+
+  /**
+   * Injected by extension.ts after ChatPanelProvider is available.
+   * Returns true if the panel for a given sessionId is currently visible.
+   */
+  public isPanelVisible: (sessionId: string) => boolean = () => false;
 
   private _onDidChangeSessions = new vscode.EventEmitter<void>();
   public readonly onDidChangeSessions = this._onDidChangeSessions.event;
@@ -39,7 +44,6 @@ export class SessionManager {
     };
 
     claudeProcess.onData((data) => {
-      // Keep raw buffer capped at ~500 KB to avoid unbounded memory growth
       state.rawBuffer += data;
       if (state.rawBuffer.length > 512_000) {
         state.rawBuffer = state.rawBuffer.slice(-512_000);
@@ -51,7 +55,6 @@ export class SessionManager {
       state.history.push(event);
       this._onParsedEvent.fire({ id, event });
 
-      // Derive status from event type
       const prevStatus = state.status;
       if (event.type === 'permission_request') {
         state.status = 'permission_required';
@@ -65,11 +68,9 @@ export class SessionManager {
 
       this._onDidChangeSessions.fire();
 
-      // Background notification when panel is not visible
       if (state.status !== prevStatus &&
           (state.status === 'permission_required' || state.status === 'finished' || state.status === 'error')) {
-        const panel = ChatPanelProvider.currentPanels.get(id);
-        if (!panel?.isVisible) {
+        if (!this.isPanelVisible(id)) {
           const msg = state.status === 'permission_required'
             ? `Claude: Permission required — ${state.label}`
             : state.status === 'error'

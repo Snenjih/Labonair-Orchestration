@@ -5,6 +5,12 @@ import { ChatPanelProvider } from './ChatPanelProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
   const sessionManager = new SessionManager();
+
+  // Break the circular dependency: SessionManager checks panel visibility
+  // via this callback rather than importing ChatPanelProvider directly.
+  sessionManager.isPanelVisible = (id) =>
+    ChatPanelProvider.currentPanels.get(id)?.isVisible ?? false;
+
   const sidebarProvider = new SidebarProvider(sessionManager);
 
   context.subscriptions.push(
@@ -22,7 +28,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('labonair.action.deleteSession', (item: vscode.TreeItem) => {
       const sessionId = item.tooltip as string;
-      ChatPanelProvider.currentPanels.get(sessionId); // reveal before dispose if open
+      // Close the webview panel if it is open, then kill the PTY process.
+      const panel = ChatPanelProvider.currentPanels.get(sessionId);
+      if (panel) {
+        ChatPanelProvider.currentPanels.delete(sessionId);
+        panel.dispose();
+      }
       sessionManager.deleteSession(sessionId);
     }),
 

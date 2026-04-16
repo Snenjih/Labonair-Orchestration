@@ -13,6 +13,10 @@ export class ChatPanelProvider {
     return this.panel.visible;
   }
 
+  public dispose(): void {
+    this.panel.dispose();
+  }
+
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, sessionId: string, sessionManager: SessionManager) {
     this.panel = panel;
     this.sessionId = sessionId;
