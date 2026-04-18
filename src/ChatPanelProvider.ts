@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SessionManager } from './SessionManager';
+import { DEFAULT_AGENT_SETTINGS, AgentSettings } from './shared/types';
 
 export class ChatPanelProvider {
   public static currentPanels: Map<string, ChatPanelProvider> = new Map();
@@ -43,6 +44,12 @@ export class ChatPanelProvider {
         if (id === sessionId) {
           this.panel.webview.postMessage({ type: 'context_update', payload: tokens });
         }
+      }),
+      sessionManager.onLabelChanged(({ id, label }) => {
+        if (id === sessionId) {
+          this.panel.title = label;
+          this.panel.webview.postMessage({ type: 'label_update', payload: label });
+        }
       })
     );
 
@@ -54,6 +61,7 @@ export class ChatPanelProvider {
             this.context.secrets.get('labonair.apiKey'),
             this.context.secrets.get('labonair.authMode'),
           ]);
+          const settings = this.context.globalState.get<AgentSettings>('labonair.settings', DEFAULT_AGENT_SETTINGS);
           this.panel.webview.postMessage({
             type: 'initialState',
             payload: {
@@ -62,6 +70,9 @@ export class ChatPanelProvider {
               history: state?.history ?? [],
               hasApiKey: !!apiKey || authMode === 'claudeCode',
               authMode: authMode ?? 'manual',
+              label: state?.label ?? `Session ${this.sessionId.slice(0, 6)}`,
+              defaultModel: settings.defaultModel,
+              defaultEffort: settings.defaultEffort,
             }
           });
           break;
@@ -137,9 +148,12 @@ export class ChatPanelProvider {
       return;
     }
 
+    const state = sessionManager.getSessionState(sessionId);
+    const panelTitle = state?.label ?? `Agent ${sessionId.slice(0, 6)}`;
+
     const panel = vscode.window.createWebviewPanel(
       'labonairAgent',
-      `Agent ${sessionId.slice(0, 6)}`,
+      panelTitle,
       vscode.ViewColumn.One,
       {
         enableScripts: true,

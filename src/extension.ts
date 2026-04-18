@@ -16,6 +16,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
   // If authMode === 'claudeCode', no custom key is set — SDK reads ~/.claude/ credentials.
 
+  // Load persisted settings before restoring sessions (so sessions use correct defaults)
+  sessionManager.loadSettings(context);
+
   // Restore sessions from previous VS Code session
   sessionManager.loadFromStorage(context);
 
@@ -24,7 +27,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   sessionManager.isPanelVisible = (id) =>
     ChatPanelProvider.currentPanels.get(id)?.isVisible ?? false;
 
-  const sidebarProvider = new SidebarProvider(context.extensionUri, sessionManager);
+  const sidebarProvider = new SidebarProvider(context.extensionUri, sessionManager, context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebarProvider),

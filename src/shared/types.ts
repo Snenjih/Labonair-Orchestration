@@ -9,3 +9,15 @@ export type ParsedEvent =
   | { type: 'session_finished'; inputTokens?: number };
 
 export type SessionStatus = 'idle' | 'working' | 'permission_required' | 'finished' | 'error';
+
+export interface AgentSettings {
+  defaultModel: string;
+  defaultEffort: string;
+  permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions';
+}
+
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  defaultModel: 'claude-sonnet-4-6',
+  defaultEffort: 'medium',
+  permissionMode: 'default',
+};

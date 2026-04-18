@@ -12,6 +12,7 @@ interface SessionMeta {
 
 export default function App() {
   const [session, setSession] = useState<SessionMeta | null>(null);
+  const [sessionLabel, setSessionLabel] = useState<string>('');
   const [status, setStatus] = useState<string>('idle');
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null); // null = unknown
   const [history, setHistory] = useState<ParsedEvent[]>([]);
@@ -29,6 +30,9 @@ export default function App() {
           setSession({ sessionId: message.payload.sessionId, status: message.payload.status });
           setStatus(message.payload.status ?? 'idle');
           setHasApiKey(message.payload.hasApiKey ?? false);
+          if (message.payload.label) { setSessionLabel(message.payload.label); }
+          if (message.payload.defaultModel) { setSelectedModel(message.payload.defaultModel); }
+          if (message.payload.defaultEffort) { setSelectedEffort(message.payload.defaultEffort); }
           if (Array.isArray(message.payload.history)) {
             setHistory(message.payload.history as ParsedEvent[]);
           }
@@ -47,6 +51,9 @@ export default function App() {
           break;
         case 'context_update':
           setContextTokens(message.payload as number);
+          break;
+        case 'label_update':
+          setSessionLabel(message.payload as string);
           break;
       }
     };
@@ -91,7 +98,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <span className="app-header__title">
-          {session ? `Session ${session.sessionId.slice(0, 6)}` : 'Loading…'}
+          {sessionLabel || (session ? `Session ${session.sessionId.slice(0, 6)}` : 'Loading…')}
         </span>
       </header>
 

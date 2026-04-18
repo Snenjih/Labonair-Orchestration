@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import type { EffortLevel, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { ClaudeProcess } from './ClaudeProcess';
-import { ParsedEvent, SessionStatus } from './shared/types';
+import { ParsedEvent, SessionStatus, AgentSettings, DEFAULT_AGENT_SETTINGS } from './shared/types';
 import { translateSdkMessage } from './parser/SdkEventTranslator';
 
 export interface SessionState {
@@ -23,6 +24,7 @@ export class SessionManager {
   private sessions = new Map<string, SessionState>();
   private apiKey: string | undefined;
   private storageContext: vscode.ExtensionContext | undefined;
+  private settings: AgentSettings = { ...DEFAULT_AGENT_SETTINGS };
 
   public isPanelVisible: (sessionId: string) => boolean = () => false;
 
@@ -37,6 +39,19 @@ export class SessionManager {
 
   private _onContextUpdate = new vscode.EventEmitter<{ id: string; tokens: number }>();
   public readonly onContextUpdate = this._onContextUpdate.event;
+
+  private _onLabelChanged = new vscode.EventEmitter<{ id: string; label: string }>();
+  public readonly onLabelChanged = this._onLabelChanged.event;
+
+  loadSettings(context: vscode.ExtensionContext): void {
+    this.settings = context.globalState.get<AgentSettings>('labonair.settings', { ...DEFAULT_AGENT_SETTINGS });
+  }
+
+  updateSettings(settings: AgentSettings): void {
+    this.settings = { ...settings };
+  }
+
+  getSettings(): AgentSettings { return { ...this.settings }; }
 
   setApiKey(key: string): void {
     this.apiKey = key;
@@ -58,7 +73,13 @@ export class SessionManager {
     const persisted = context.globalState.get<PersistedSession[]>(STORAGE_KEY, []);
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
     for (const saved of persisted) {
-      const claudeProcess = new ClaudeProcess(cwd, undefined, undefined, undefined, this.apiKey);
+      const claudeProcess = new ClaudeProcess(
+        cwd,
+        this.settings.defaultModel,
+        this.settings.permissionMode as PermissionMode,
+        this.settings.defaultEffort as EffortLevel,
+        this.apiKey
+      );
       const state: SessionState = {
         process: claudeProcess,
         history: saved.history,
@@ -94,7 +115,13 @@ export class SessionManager {
       cwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 
     const id = crypto.randomUUID();
-    const claudeProcess = new ClaudeProcess(resolvedCwd, undefined, undefined, undefined, this.apiKey);
+    const claudeProcess = new ClaudeProcess(
+      resolvedCwd,
+      this.settings.defaultModel,
+      this.settings.permissionMode as PermissionMode,
+      this.settings.defaultEffort as EffortLevel,
+      this.apiKey
+    );
     const state: SessionState = {
       process: claudeProcess,
       history: [],
@@ -133,9 +160,17 @@ export class SessionManager {
     const state = this.sessions.get(sessionId);
     if (!state) { return; }
 
+    const isFirstTurn = !state.history.some(e => e.type === 'user_message');
+
     const userEvent: ParsedEvent = { type: 'user_message', text };
     state.history.push(userEvent);
     this._onParsedEvent.fire({ id: sessionId, event: userEvent });
+
+    if (isFirstTurn) {
+      state.label = this._generateTitle(text);
+      this._onLabelChanged.fire({ id: sessionId, label: state.label });
+      this._onDidChangeSessions.fire();
+    }
 
     state.status = 'working';
     this._onDidChangeSessions.fire();
@@ -202,6 +237,14 @@ export class SessionManager {
         vscode.commands.executeCommand('labonair.action.focusSession', id);
       }
     });
+  }
+
+  private _generateTitle(text: string): string {
+    const clean = text.replace(/\s+/g, ' ').trim();
+    if (clean.length <= 48) { return clean; }
+    const truncated = clean.slice(0, 48);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + '…';
   }
 
   getSession(id: string): ClaudeProcess | undefined {
