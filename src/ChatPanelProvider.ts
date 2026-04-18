@@ -7,6 +7,7 @@ export class ChatPanelProvider {
   private readonly panel: vscode.WebviewPanel;
   private readonly sessionId: string;
   private readonly sessionManager: SessionManager;
+  private readonly context: vscode.ExtensionContext;
   private readonly subscriptions: vscode.Disposable[] = [];
 
   public get isVisible(): boolean {
@@ -17,23 +18,25 @@ export class ChatPanelProvider {
     this.panel.dispose();
   }
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, sessionId: string, sessionManager: SessionManager) {
+  private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext, sessionId: string, sessionManager: SessionManager) {
     this.panel = panel;
+    this.context = context;
     this.sessionId = sessionId;
     this.sessionManager = sessionManager;
 
-    this.panel.webview.html = this._buildHtml(extensionUri);
+    this.panel.webview.html = this._buildHtml(context.extensionUri);
 
-    // Forward parsed events for this session to the webview in real-time
+    // Forward parsed events and status changes for this session to the webview
     this.subscriptions.push(
       sessionManager.onParsedEvent(({ id, event }) => {
         if (id === sessionId) {
           this.panel.webview.postMessage({ type: 'parsed_event', payload: event });
         }
       }),
-      sessionManager.onRawOutput(({ id, data }) => {
-        if (id === sessionId) {
-          this.panel.webview.postMessage({ type: 'raw_output', payload: data });
+      sessionManager.onDidChangeSessions(() => {
+        const s = sessionManager.getSessionState(sessionId);
+        if (s) {
+          this.panel.webview.postMessage({ type: 'status_update', payload: s.status });
         }
       })
     );
@@ -42,15 +45,39 @@ export class ChatPanelProvider {
       switch (message.type) {
         case 'requestInitialState': {
           const state = this.sessionManager.getSessionState(this.sessionId);
+          const [apiKey, authMode] = await Promise.all([
+            this.context.secrets.get('labonair.apiKey'),
+            this.context.secrets.get('labonair.authMode'),
+          ]);
           this.panel.webview.postMessage({
             type: 'initialState',
             payload: {
               sessionId: this.sessionId,
               status: state?.status ?? 'idle',
               history: state?.history ?? [],
-              rawBuffer: state?.rawBuffer ?? '',
+              hasApiKey: !!apiKey || authMode === 'claudeCode',
+              authMode: authMode ?? 'manual',
             }
           });
+          break;
+        }
+
+        case 'setApiKey': {
+          const key = message.payload as string;
+          await this.context.secrets.store('labonair.apiKey', key);
+          await this.context.secrets.delete('labonair.authMode');
+          this.sessionManager.setApiKey(key);
+          this.panel.webview.postMessage({ type: 'api_key_saved' });
+          break;
+        }
+
+        case 'useClaudeCodeAuth': {
+          // Store the auth mode flag; remove any manually stored key so the
+          // SDK discovers Claude Code's own credentials via settingSources: ['user'].
+          await this.context.secrets.store('labonair.authMode', 'claudeCode');
+          await this.context.secrets.delete('labonair.apiKey');
+          this.sessionManager.clearApiKey();
+          this.panel.webview.postMessage({ type: 'api_key_saved' });
           break;
         }
 
@@ -65,9 +92,10 @@ export class ChatPanelProvider {
         }
 
         case 'submit': {
-          const { text, config } = message.payload as { text: string; config: { model: string; permissionMode?: string } };
+          const { text, config } = message.payload as { text: string; config: { model: string; effort?: string } };
           const claudeProcess = this.sessionManager.getSession(this.sessionId);
           if (config?.model) { claudeProcess?.setModel(config.model); }
+          if (config?.effort) { claudeProcess?.setEffort(config.effort as any); }
           this.sessionManager.runTurn(this.sessionId, text).catch(console.error);
           break;
         }
@@ -75,6 +103,11 @@ export class ChatPanelProvider {
         case 'respondToPermission': {
           const { requestId, allowed } = message as { requestId: string; allowed: boolean };
           this.sessionManager.respondToPermission(this.sessionId, requestId, allowed);
+          break;
+        }
+
+        case 'interrupt': {
+          this.sessionManager.getSession(this.sessionId)?.interrupt();
           break;
         }
       }
@@ -86,7 +119,7 @@ export class ChatPanelProvider {
     });
   }
 
-  public static createOrShow(extensionUri: vscode.Uri, sessionId: string, sessionManager: SessionManager): void {
+  public static createOrShow(context: vscode.ExtensionContext, sessionId: string, sessionManager: SessionManager): void {
     const existing = ChatPanelProvider.currentPanels.get(sessionId);
     if (existing) {
       existing.panel.reveal();
@@ -101,16 +134,16 @@ export class ChatPanelProvider {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode.Uri.joinPath(extensionUri, 'dist', 'webview')
+          vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')
         ]
       }
     );
 
-    const provider = new ChatPanelProvider(panel, extensionUri, sessionId, sessionManager);
+    const provider = new ChatPanelProvider(panel, context, sessionId, sessionManager);
     ChatPanelProvider.currentPanels.set(sessionId, provider);
   }
 
-  private _buildHtml(extensionUri: vscode.Uri): string {
+  private _buildHtml(extensionUri: vscode.Uri = this.context.extensionUri): string {
     const webview = this.panel.webview;
 
     const scriptUri = webview.asWebviewUri(

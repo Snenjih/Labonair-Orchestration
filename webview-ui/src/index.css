@@ -3,6 +3,14 @@
    Uses VS Code CSS variables for theme compatibility.
    ============================================================ */
 
+@font-face {
+  font-family: 'Roboto';
+  src: url('./assets/Roboto-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -11,12 +19,14 @@
 
 :root {
   --radius: 6px;
+  --radius-pill: 20px;
   --gap: 8px;
+  --chat-max-width: 720px;
   --font-mono: var(--vscode-editor-font-family, "Cascadia Code", "Fira Code", monospace);
 }
 
 body {
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-family: 'Roboto', var(--vscode-font-family, system-ui, sans-serif);
   font-size: var(--vscode-font-size, 13px);
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
@@ -36,102 +46,54 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
+  justify-content: center;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--vscode-panel-border);
   background: var(--vscode-titleBar-activeBackground, var(--vscode-editor-background));
   flex-shrink: 0;
 }
 
 .app-header__title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  opacity: 0.75;
-  letter-spacing: 0.04em;
+  opacity: 0.5;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-/* ── Content area (chat / terminal / split) ───────────────── */
+/* ── Content area ─────────────────────────────────────────── */
 
 .app-content {
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-.app-content--ui,
-.app-content--terminal {
-  flex-direction: column;
-}
-
-.app-content--split {
-  flex-direction: column;
-}
-
-.app-content--split .stream-view {
-  flex: 1;
-  border-bottom: 1px solid var(--vscode-panel-border);
-}
-
-.app-content--split .terminal-container {
-  flex: 1;
-}
-
-/* ── Footer ───────────────────────────────────────────────── */
-
-.footer {
-  flex-shrink: 0;
-  border-top: 1px solid var(--vscode-panel-border);
-  background: var(--vscode-editor-background);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-}
-
-/* ── View toggles ─────────────────────────────────────────── */
-
-.view-toggles {
-  display: flex;
-  gap: 2px;
-  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.05));
-  border-radius: var(--radius);
-  padding: 2px;
-}
-
-.view-toggle-btn {
-  padding: 3px 10px;
-  border: none;
-  border-radius: calc(var(--radius) - 2px);
-  background: transparent;
-  color: var(--vscode-foreground);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  opacity: 0.65;
-  transition: opacity 0.15s, background 0.15s;
-}
-
-.view-toggle-btn:hover { opacity: 1; }
-
-.view-toggle-btn--active {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  opacity: 1;
+  justify-content: center;
 }
 
 /* ── Stream view ──────────────────────────────────────────── */
 
 .stream-view {
   flex: 1;
+  max-width: var(--chat-max-width);
+  width: 100%;
   overflow-y: auto;
-  padding: 16px 12px;
+  padding: 20px 24px 8px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   scrollbar-width: thin;
   scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+
+.footer {
+  flex-shrink: 0;
+  background: var(--vscode-editor-background);
+  padding: 10px 16px 14px;
+  display: flex;
+  justify-content: center;
 }
 
 /* ── Messages ─────────────────────────────────────────────── */
@@ -149,8 +111,8 @@ body {
 .msg__bubble {
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
-  padding: 8px 12px;
-  border-radius: var(--radius) var(--radius) 2px var(--radius);
+  padding: 9px 14px;
+  border-radius: 16px 16px 4px 16px;
   max-width: 80%;
   white-space: pre-wrap;
   word-break: break-word;
@@ -348,52 +310,159 @@ body {
   color: #fff;
 }
 
-/* ── Input area ───────────────────────────────────────────── */
+/* ── Pill input container ─────────────────────────────────── */
 
-.dropdowns {
-  display: flex;
-  gap: 6px;
-}
-
-.dropdowns select {
-  background: var(--vscode-dropdown-background);
-  color: var(--vscode-dropdown-foreground);
-  border: 1px solid var(--vscode-dropdown-border);
-  border-radius: var(--radius);
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.input-wrapper {
+.pill-input-container {
   position: relative;
+  width: 100%;
+  max-width: var(--chat-max-width);
+}
+
+.pill-input {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.08));
+  border-radius: var(--radius-pill);
+  padding: 10px 14px 8px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s;
 }
 
-.input-wrapper textarea {
-  background: var(--vscode-input-background);
+.pill-input:focus-within {
+  border-color: var(--vscode-focusBorder, rgba(255,255,255,0.25));
+}
+
+.pill-textarea {
+  background: transparent;
   color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: var(--radius);
-  padding: 8px 10px;
+  border: none;
+  outline: none;
   font-family: inherit;
   font-size: 13px;
   resize: none;
   overflow-y: auto;
   line-height: 1.5;
-  outline: none;
   width: 100%;
-  min-height: 38px;
+  min-height: 22px;
+  max-height: 200px;
 }
 
-.input-wrapper textarea:focus {
-  border-color: var(--vscode-focusBorder);
+.pill-textarea::placeholder {
+  color: var(--vscode-input-placeholderForeground, rgba(255,255,255,0.3));
 }
+
+/* ── Pill controls row ────────────────────────────────────── */
+
+.pill-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.pill-left-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pill-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Pill icon buttons ────────────────────────────────────── */
+
+.pill-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--vscode-foreground);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.pill-icon-btn:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.07));
+}
+
+/* ── Pill model/effort selector ───────────────────────────── */
+
+.pill-model-selector,
+.pill-effort-selector {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pill-select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.pill-select-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.06));
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.8;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s, background 0.15s;
+  user-select: none;
+  pointer-events: none;
+}
+
+.pill-model-selector:hover .pill-select-label,
+.pill-effort-selector:hover .pill-select-label {
+  opacity: 1;
+  background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.1));
+}
+
+/* ── Pill send button ─────────────────────────────────────── */
+
+.pill-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.pill-send-btn:hover { opacity: 0.85; }
+
+/* ── Mention list ─────────────────────────────────────────── */
 
 .mention-list {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 8px);
   left: 0;
   right: 0;
   background: var(--vscode-dropdown-background);
@@ -418,14 +487,243 @@ body {
   background: var(--vscode-list-hoverBackground);
 }
 
-/* ── Terminal container ───────────────────────────────────── */
+/* ── API Key Onboarding ───────────────────────────────────── */
 
-.terminal-container {
-  flex: 1;
-  min-height: 0;
-  padding: 4px;
-  background: #1e1e1e;
+.apikey-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--vscode-editor-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
 }
+
+.apikey-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.apikey-card__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+}
+
+.apikey-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.apikey-card__desc {
+  font-size: 12px;
+  opacity: 0.6;
+  line-height: 1.55;
+  max-width: 300px;
+}
+
+.apikey-input {
+  width: 100%;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+  border-radius: var(--radius-pill);
+  padding: 9px 16px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.apikey-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.apikey-error {
+  font-size: 11px;
+  color: #f14c4c;
+  margin-top: -6px;
+}
+
+.apikey-btn {
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.apikey-btn:hover:not(:disabled) { opacity: 0.85; }
+.apikey-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.apikey-hint {
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+.apikey-link {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.apikey-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  opacity: 0.5;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  align-self: flex-start;
+  transition: opacity 0.15s;
+}
+.apikey-back:hover { opacity: 1; }
+
+.apikey-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--vscode-foreground);
+  opacity: 0.25;
+  font-size: 11px;
+}
+.apikey-divider::before,
+.apikey-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+}
+
+.apikey-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+  border-radius: 12px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.apikey-option:hover {
+  background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.06));
+  border-color: var(--vscode-focusBorder, rgba(255,255,255,0.25));
+}
+.apikey-option--secondary {
+  opacity: 0.7;
+}
+.apikey-option--secondary:hover { opacity: 1; }
+
+.apikey-option__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.07));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--vscode-foreground);
+  opacity: 0.7;
+}
+.apikey-option__icon--primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  opacity: 1;
+}
+
+.apikey-option__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.apikey-option__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.apikey-option__desc {
+  font-size: 11px;
+  opacity: 0.5;
+  line-height: 1.4;
+}
+
+.apikey-option__arrow {
+  opacity: 0.3;
+  flex-shrink: 0;
+}
+
+/* ── Typing indicator ─────────────────────────────────────── */
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vscode-foreground);
+  opacity: 0.35;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 0.85; }
+}
+
+/* ── Pill stop button ─────────────────────────────────────── */
+
+.pill-stop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: #f14c4c;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.pill-stop-btn:hover { opacity: 0.85; }
 
 /* ── Spinner animation ────────────────────────────────────── */
 

@@ -52,10 +52,11 @@ interface Props {
   history: ParsedEvent[];
   dismissedPermissions: Set<number>;
   onPermissionRespond: (index: number, allowed: boolean) => void;
+  isWorking?: boolean;
   hidden?: boolean;
 }
 
-export default function AgentStreamView({ history, dismissedPermissions, onPermissionRespond, hidden }: Props) {
+export default function AgentStreamView({ history, dismissedPermissions, onPermissionRespond, isWorking, hidden }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,6 +104,11 @@ export default function AgentStreamView({ history, dismissedPermissions, onPermi
             return null;
         }
       })}
+      {isWorking && (
+        <div className="typing-indicator" aria-label="Claude is thinking">
+          <span /><span /><span />
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

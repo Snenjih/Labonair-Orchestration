@@ -6,6 +6,7 @@ import {
   type SDKUserMessage,
   type PermissionResult,
   type PermissionMode,
+  type EffortLevel,
 } from '@anthropic-ai/claude-agent-sdk';
 import * as crypto from 'crypto';
 
@@ -44,6 +45,8 @@ export class ClaudeProcess {
   private cwd: string;
   private model: string;
   private permissionMode: PermissionMode;
+  private effort: EffortLevel | undefined;
+  private apiKey: string | undefined;
   private activeQuery: Query | null = null;
   private inputStream: AsyncInput<SDKUserMessage> | null = null;
   private pendingPermissions = new Map<string, (result: PermissionResult) => void>();
@@ -54,10 +57,12 @@ export class ClaudeProcess {
   private _onPermissionRequest = new vscode.EventEmitter<{ requestId: string; toolName: string; input: unknown }>();
   public readonly onPermissionRequest = this._onPermissionRequest.event;
 
-  constructor(cwd: string, model = 'claude-opus-4-7', permissionMode: PermissionMode = 'default') {
+  constructor(cwd: string, model = 'claude-sonnet-4-6', permissionMode: PermissionMode = 'default', effort?: EffortLevel, apiKey?: string) {
     this.cwd = cwd;
     this.model = model;
     this.permissionMode = permissionMode;
+    this.effort = effort;
+    this.apiKey = apiKey;
   }
 
   async *startTurn(text: string): AsyncGenerator<SDKMessage> {
@@ -70,6 +75,8 @@ export class ClaudeProcess {
           model: this.model,
           permissionMode: this.permissionMode,
           settingSources: ['user', 'project'],
+          ...(this.effort ? { effort: this.effort } : {}),
+          ...(this.apiKey ? { env: { ANTHROPIC_API_KEY: this.apiKey } } : {}),
           canUseTool: async (toolName: string, input: unknown) => {
             const requestId = `perm-${crypto.randomUUID()}`;
             return new Promise<PermissionResult>(resolve => {
@@ -107,6 +114,9 @@ export class ClaudeProcess {
   }
 
   setModel(model: string): void { this.model = model; }
+  setEffort(effort: EffortLevel): void { this.effort = effort; }
+  setApiKey(key: string): void { this.apiKey = key; }
+  clearApiKey(): void { this.apiKey = undefined; }
   setPermissionMode(mode: PermissionMode): void { this.permissionMode = mode; }
 
   interrupt(): void {

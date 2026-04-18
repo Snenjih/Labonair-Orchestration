@@ -25,7 +25,8 @@
       "labonair-ai-container": [
         {
           "id": "labonair.views.agentSessions",
-          "name": "Active Sessions"
+          "name": "Active Sessions",
+          "type": "webview"
         }
       ]
     },
@@ -48,6 +49,14 @@
         "command": "labonair.action.renameSession",
         "title": "Rename Session",
         "icon": "$(edit)"
+      },
+      {
+        "command": "labonair.action.deleteSessionById",
+        "title": "Delete Session"
+      },
+      {
+        "command": "labonair.action.clearApiKey",
+        "title": "Labonair: Clear API Key"
       }
     ],
     "menus": {

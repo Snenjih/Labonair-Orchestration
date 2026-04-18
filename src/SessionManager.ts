@@ -7,13 +7,22 @@ import { translateSdkMessage } from './parser/SdkEventTranslator';
 export interface SessionState {
   process: ClaudeProcess;
   history: ParsedEvent[];
-  rawBuffer: string;
   status: SessionStatus;
   label: string;
 }
 
+interface PersistedSession {
+  id: string;
+  label: string;
+  history: ParsedEvent[];
+}
+
+const STORAGE_KEY = 'labonair.sessions';
+
 export class SessionManager {
   private sessions = new Map<string, SessionState>();
+  private apiKey: string | undefined;
+  private storageContext: vscode.ExtensionContext | undefined;
 
   public isPanelVisible: (sessionId: string) => boolean = () => false;
 
@@ -26,20 +35,72 @@ export class SessionManager {
   private _onRawOutput = new vscode.EventEmitter<{ id: string; data: string }>();
   public readonly onRawOutput = this._onRawOutput.event;
 
+  setApiKey(key: string): void {
+    this.apiKey = key;
+    for (const { state } of this.getAllSessions()) {
+      state.process.setApiKey(key);
+    }
+  }
+
+  clearApiKey(): void {
+    this.apiKey = undefined;
+    for (const { state } of this.getAllSessions()) {
+      state.process.clearApiKey();
+    }
+  }
+
+  /** Call once on activate to enable persistence. */
+  loadFromStorage(context: vscode.ExtensionContext): void {
+    this.storageContext = context;
+    const persisted = context.globalState.get<PersistedSession[]>(STORAGE_KEY, []);
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    for (const saved of persisted) {
+      const claudeProcess = new ClaudeProcess(cwd, undefined, undefined, undefined, this.apiKey);
+      const state: SessionState = {
+        process: claudeProcess,
+        history: saved.history,
+        status: 'finished',
+        label: saved.label,
+      };
+      this._wireProcess(saved.id, claudeProcess, state);
+      this.sessions.set(saved.id, state);
+    }
+    if (persisted.length > 0) {
+      this._onDidChangeSessions.fire();
+    }
+  }
+
+  private _persist(): void {
+    if (!this.storageContext) { return; }
+    const data: PersistedSession[] = Array.from(this.sessions.entries()).map(([id, state]) => ({
+      id,
+      label: state.label,
+      history: state.history,
+    }));
+    this.storageContext.globalState.update(STORAGE_KEY, data);
+  }
+
   createSession(cwd?: string): string {
     const resolvedCwd =
       cwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 
     const id = crypto.randomUUID();
-    const claudeProcess = new ClaudeProcess(resolvedCwd);
+    const claudeProcess = new ClaudeProcess(resolvedCwd, undefined, undefined, undefined, this.apiKey);
     const state: SessionState = {
       process: claudeProcess,
       history: [],
-      rawBuffer: '',
       status: 'idle',
       label: `Session ${id.slice(0, 6)}`,
     };
 
+    this._wireProcess(id, claudeProcess, state);
+    this.sessions.set(id, state);
+    this._onDidChangeSessions.fire();
+    this._persist();
+    return id;
+  }
+
+  private _wireProcess(id: string, claudeProcess: ClaudeProcess, state: SessionState): void {
     claudeProcess.onPermissionRequest(({ requestId, toolName, input }) => {
       const event: ParsedEvent = {
         type: 'permission_request',
@@ -55,16 +116,8 @@ export class SessionManager {
     });
 
     claudeProcess.onRawOutput((data) => {
-      state.rawBuffer += data;
-      if (state.rawBuffer.length > 512_000) {
-        state.rawBuffer = state.rawBuffer.slice(-512_000);
-      }
       this._onRawOutput.fire({ id, data });
     });
-
-    this.sessions.set(id, state);
-    this._onDidChangeSessions.fire();
-    return id;
   }
 
   async runTurn(sessionId: string, text: string): Promise<void> {
@@ -92,6 +145,8 @@ export class SessionManager {
       this._onDidChangeSessions.fire();
       this._maybeNotify(sessionId, state);
     }
+
+    this._persist();
   }
 
   respondToPermission(sessionId: string, requestId: string, allowed: boolean): void {
@@ -154,6 +209,7 @@ export class SessionManager {
     if (state) {
       state.label = label;
       this._onDidChangeSessions.fire();
+      this._persist();
     }
   }
 
@@ -162,5 +218,6 @@ export class SessionManager {
     state?.process.dispose();
     this.sessions.delete(id);
     this._onDidChangeSessions.fire();
+    this._persist();
   }
 }

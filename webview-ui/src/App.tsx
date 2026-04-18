@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { vscode } from './utils/vscode';
 import { ParsedEvent } from './types';
 import AgentStreamView from './components/AgentStreamView';
-import AgentFormDropdowns from './components/AgentFormDropdowns';
 import MessageInput from './components/MessageInput';
-import TerminalEmulator, { TerminalEmulatorHandle } from './components/TerminalEmulator';
-import ViewToggles, { ViewMode } from './components/ViewToggles';
+import ApiKeySetup from './components/ApiKeySetup';
 
 interface SessionMeta {
   sessionId: string;
@@ -14,14 +12,13 @@ interface SessionMeta {
 
 export default function App() {
   const [session, setSession] = useState<SessionMeta | null>(null);
+  const [status, setStatus] = useState<string>('idle');
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null); // null = unknown
   const [history, setHistory] = useState<ParsedEvent[]>([]);
   const [dismissedPermissions, setDismissedPermissions] = useState<Set<number>>(new Set());
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
-  const [selectedEffort, setSelectedEffort] = useState('standard');
+  const [selectedEffort, setSelectedEffort] = useState('medium');
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>('ui');
-
-  const terminalRef = useRef<TerminalEmulatorHandle>(null);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -29,19 +26,20 @@ export default function App() {
       switch (message.type) {
         case 'initialState':
           setSession({ sessionId: message.payload.sessionId, status: message.payload.status });
+          setStatus(message.payload.status ?? 'idle');
+          setHasApiKey(message.payload.hasApiKey ?? false);
           if (Array.isArray(message.payload.history)) {
             setHistory(message.payload.history as ParsedEvent[]);
           }
-          // Replay raw terminal history
-          if (message.payload.rawBuffer) {
-            terminalRef.current?.writeOutput(message.payload.rawBuffer);
-          }
+          break;
+        case 'api_key_saved':
+          setHasApiKey(true);
           break;
         case 'parsed_event':
           setHistory(h => [...h, message.payload as ParsedEvent]);
           break;
-        case 'raw_output':
-          terminalRef.current?.writeOutput(message.payload as string);
+        case 'status_update':
+          setStatus(message.payload as string);
           break;
         case 'file_suggestions':
           setFileSuggestions(message.payload as string[]);
@@ -62,7 +60,6 @@ export default function App() {
   }
 
   function handleSubmit(text: string) {
-    setHistory(h => [...h, { type: 'user_message', text }]);
     vscode.postMessage({
       type: 'submit',
       payload: { text, config: { model: selectedModel, effort: selectedEffort } }
@@ -70,8 +67,15 @@ export default function App() {
     setFileSuggestions([]);
   }
 
-  const showUi = viewMode === 'ui' || viewMode === 'split';
-  const showTerminal = viewMode === 'terminal' || viewMode === 'split';
+  function handleInterrupt() {
+    vscode.postMessage({ type: 'interrupt' });
+  }
+
+  const isWorking = status === 'working';
+
+  if (hasApiKey === false) {
+    return <ApiKeySetup />;
+  }
 
   return (
     <div className="app">
@@ -79,30 +83,27 @@ export default function App() {
         <span className="app-header__title">
           {session ? `Session ${session.sessionId.slice(0, 6)}` : 'Loading…'}
         </span>
-        <ViewToggles mode={viewMode} onChangeViewMode={setViewMode} />
       </header>
 
-      <div className={`app-content app-content--${viewMode}`}>
-        {/* Always mounted so xterm canvas is never destroyed; hidden via CSS */}
+      <div className="app-content">
         <AgentStreamView
           history={history}
           dismissedPermissions={dismissedPermissions}
           onPermissionRespond={handlePermissionRespond}
-          hidden={!showUi}
+          isWorking={isWorking}
         />
-        <TerminalEmulator ref={terminalRef} hidden={!showTerminal} />
       </div>
 
       <div className="footer">
-        <AgentFormDropdowns
+        <MessageInput
+          fileSuggestions={fileSuggestions}
+          onSubmit={handleSubmit}
+          onInterrupt={handleInterrupt}
+          isWorking={isWorking}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
           selectedEffort={selectedEffort}
           onEffortChange={setSelectedEffort}
-        />
-        <MessageInput
-          fileSuggestions={fileSuggestions}
-          onSubmit={handleSubmit}
         />
       </div>
     </div>
