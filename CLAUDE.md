@@ -171,7 +171,11 @@ tsc -p ./
 - ✅ Phase 5 — Sidebar & Notifications (SidebarProvider with dynamic icons, background toast notifications)
 - ✅ SDK Rework — Replaced node-pty + PtyParser with @anthropic-ai/claude-agent-sdk
 - ✅ Phase 6 — UI Polish: pill input with effort (low/medium/high/xhigh/max), centered chat layout, duplicate message fix
+- ✅ Phase 7 — Session Auto-Titles: first user message auto-generates tab + sidebar label via `_generateTitle()`; `onLabelChanged` event propagates to panel title and webview header in real-time
+- ✅ Phase 8 — Settings System: persistent `AgentSettings` (model, effort, permissionMode) stored in `globalState`; sidebar footer with GitHub username + gear button; inline settings panel with auto-save; new sessions use saved defaults; chat panel pre-populates model/effort from settings
 
 **Effort:** `EffortLevel` ('low'|'medium'|'high'|'xhigh'|'max') passed via query options in ClaudeProcess.ts.
 
-**Next:** End-to-end testing in Extension Development Host. Potential Phase 7: session resume, MCP server config, settings UI.
+**AgentSettings storage key:** `labonair.settings` in `context.globalState`. Defaults: `{ defaultModel: 'claude-sonnet-4-6', defaultEffort: 'medium', permissionMode: 'default' }`.
+
+**Next:** End-to-end testing in Extension Development Host. Potential Phase 9: AI-generated session titles (SDK call on first turn), MCP server config UI, session resume/fork.
