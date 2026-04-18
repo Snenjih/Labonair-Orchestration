@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install webview dependencies
+        run: cd webview-ui && npm ci
+
+      - name: Build extension
+        run: npm run compile
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Package VSIX
+        run: vsce package --no-dependencies --out labonair-ai-core.vsix
+
+      - name: Create source zip
+        run: |
+          zip -r source-code.zip . \
+            --exclude "*.git*" \
+            --exclude "node_modules/*" \
+            --exclude "webview-ui/node_modules/*" \
+            --exclude "out/*" \
+            --exclude "dist/*"
+
+      - name: Generate changelog
+        id: changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        continue-on-error: true
+
+      - name: Fallback changelog
+        id: fallback_changelog
+        if: steps.changelog.outcome == 'failure'
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s" --no-merges)
+          else
+            NOTES=$(git log --pretty=format:"- %s" --no-merges | head -20)
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.content || steps.fallback_changelog.outputs.notes }}
+          files: |
+            labonair-ai-core.vsix
+            source-code.zip
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
