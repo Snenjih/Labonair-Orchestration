@@ -38,6 +38,11 @@ export class ChatPanelProvider {
         if (s) {
           this.panel.webview.postMessage({ type: 'status_update', payload: s.status });
         }
+      }),
+      sessionManager.onContextUpdate(({ id, tokens }) => {
+        if (id === sessionId) {
+          this.panel.webview.postMessage({ type: 'context_update', payload: tokens });
+        }
       })
     );
 
@@ -103,6 +108,12 @@ export class ChatPanelProvider {
         case 'respondToPermission': {
           const { requestId, allowed } = message as { requestId: string; allowed: boolean };
           this.sessionManager.respondToPermission(this.sessionId, requestId, allowed);
+          break;
+        }
+
+        case 'clearHistory': {
+          const s = this.sessionManager.getSessionState(this.sessionId);
+          if (s) { s.history = []; this.sessionManager['_persist'](); }
           break;
         }
 

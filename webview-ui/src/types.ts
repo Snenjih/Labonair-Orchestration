@@ -7,4 +7,4 @@ export type ParsedEvent =
   | { type: 'tool_call_output'; output: string }
   | { type: 'tool_call_end'; status: 'completed' | 'failed' }
   | { type: 'permission_request'; action: string; context: string; requestId: string }
-  | { type: 'session_finished' };
+  | { type: 'session_finished'; inputTokens?: number };

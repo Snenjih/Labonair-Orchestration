@@ -30,7 +30,10 @@ export function translateSdkMessage(message: SDKMessage): ParsedEvent[] {
   }
 
   if (message.type === 'result') {
-    events.push({ type: 'session_finished' });
+    const usage = (message as any).result?.usage ?? (message as any).usage;
+    const inputTokens: number | undefined =
+      usage?.input_tokens ?? usage?.cache_read_input_tokens;
+    events.push({ type: 'session_finished', inputTokens });
   }
 
   return events;

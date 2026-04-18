@@ -19,6 +19,7 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const [selectedEffort, setSelectedEffort] = useState('medium');
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
+  const [contextTokens, setContextTokens] = useState(0);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -43,6 +44,9 @@ export default function App() {
           break;
         case 'file_suggestions':
           setFileSuggestions(message.payload as string[]);
+          break;
+        case 'context_update':
+          setContextTokens(message.payload as number);
           break;
       }
     };
@@ -69,6 +73,12 @@ export default function App() {
 
   function handleInterrupt() {
     vscode.postMessage({ type: 'interrupt' });
+  }
+
+  function handleClear() {
+    setHistory([]);
+    setContextTokens(0);
+    vscode.postMessage({ type: 'clearHistory' });
   }
 
   const isWorking = status === 'working';
@@ -99,11 +109,14 @@ export default function App() {
           fileSuggestions={fileSuggestions}
           onSubmit={handleSubmit}
           onInterrupt={handleInterrupt}
+          onClear={handleClear}
           isWorking={isWorking}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
           selectedEffort={selectedEffort}
           onEffortChange={setSelectedEffort}
+          contextTokens={contextTokens}
+          contextMaxTokens={200000}
         />
       </div>
     </div>

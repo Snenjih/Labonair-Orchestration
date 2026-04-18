@@ -2,7 +2,23 @@ import { useEffect, useRef, useState, KeyboardEvent, ChangeEvent } from 'react';
 import { vscode } from '../utils/vscode';
 
 const MENTION_RE = /(?:^|\s)@([^\s]*)$/;
-const MAX_HEIGHT = 200;
+const COMMAND_RE = /(?:^|\n)\/([^\s]*)$/;
+const MAX_HEIGHT = 300;
+
+interface SlashCommand {
+  name: string;
+  description: string;
+  clientOnly?: boolean;
+}
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  { name: 'clear',    description: 'Clear conversation history',         clientOnly: true },
+  { name: 'compact',  description: 'Summarize and compact context' },
+  { name: 'review',   description: 'Review the current code changes' },
+  { name: 'init',     description: 'Create a CLAUDE.md for this project' },
+  { name: 'think',    description: 'Enable extended reasoning for next reply' },
+  { name: 'help',     description: 'Show available commands and tips' },
+];
 
 const MODEL_OPTIONS = [
   { label: 'Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
@@ -22,21 +38,27 @@ interface Props {
   fileSuggestions: string[];
   onSubmit: (text: string) => void;
   onInterrupt: () => void;
+  onClear: () => void;
   isWorking: boolean;
   selectedModel: string;
   onModelChange: (model: string) => void;
   selectedEffort: string;
   onEffortChange: (effort: string) => void;
+  contextTokens?: number;
+  contextMaxTokens?: number;
 }
 
 export default function MessageInput({
-  fileSuggestions, onSubmit, onInterrupt, isWorking,
+  fileSuggestions, onSubmit, onInterrupt, onClear, isWorking,
   selectedModel, onModelChange,
   selectedEffort, onEffortChange,
+  contextTokens = 0, contextMaxTokens = 200000,
 }: Props) {
   const [text, setText] = useState('');
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [focusedSuggestion, setFocusedSuggestion] = useState(0);
+  const [commandQuery, setCommandQuery] = useState<string | null>(null);
+  const [focusedCommand, setFocusedCommand] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { setFocusedSuggestion(0); }, [fileSuggestions]);
@@ -50,13 +72,41 @@ export default function MessageInput({
 
   function detectMention(value: string, cursorPos: number) {
     const before = value.slice(0, cursorPos);
-    const match = before.match(MENTION_RE);
-    if (match) {
-      setMentionQuery(match[1]);
-      vscode.postMessage({ type: 'requestFileSuggestions', query: match[1] });
+
+    const cmdMatch = before.match(COMMAND_RE);
+    if (cmdMatch) {
+      const q = cmdMatch[1].toLowerCase();
+      setCommandQuery(q);
+      setMentionQuery(null);
+      setFocusedCommand(0);
+      return;
+    }
+    setCommandQuery(null);
+
+    const fileMatch = before.match(MENTION_RE);
+    if (fileMatch) {
+      setMentionQuery(fileMatch[1]);
+      vscode.postMessage({ type: 'requestFileSuggestions', query: fileMatch[1] });
     } else {
       setMentionQuery(null);
     }
+  }
+
+  function filteredCommands() {
+    if (commandQuery === null) { return []; }
+    return SLASH_COMMANDS.filter(c => c.name.startsWith(commandQuery));
+  }
+
+  function applyCommand(cmd: SlashCommand) {
+    const el = textareaRef.current;
+    const cursor = el?.selectionStart ?? text.length;
+    const before = text.slice(0, cursor);
+    const after = text.slice(cursor);
+    const slashIdx = before.lastIndexOf('/');
+    const newBefore = before.slice(0, slashIdx) + '/' + cmd.name;
+    setText(newBefore + after);
+    setCommandQuery(null);
+    setTimeout(() => { resizeTextarea(); el?.focus(); }, 0);
   }
 
   function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
@@ -83,7 +133,24 @@ export default function MessageInput({
     setTimeout(() => { resizeTextarea(); el?.focus(); }, 0);
   }
 
+  function submitText(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) { return; }
+    if (trimmed === '/clear') { onClear(); setText(''); setTimeout(resizeTextarea, 0); return; }
+    onSubmit(trimmed);
+    setText('');
+    setTimeout(resizeTextarea, 0);
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    const cmds = filteredCommands();
+    if (commandQuery !== null && cmds.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedCommand(i => Math.min(i + 1, cmds.length - 1)); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedCommand(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Tab') { e.preventDefault(); applyCommand(cmds[focusedCommand]); return; }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); applyCommand(cmds[focusedCommand]); return; }
+      if (e.key === 'Escape') { setCommandQuery(null); return; }
+    }
     if (mentionQuery !== null && fileSuggestions.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedSuggestion(i => Math.min(i + 1, fileSuggestions.length - 1)); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedSuggestion(i => Math.max(i - 1, 0)); return; }
@@ -92,18 +159,31 @@ export default function MessageInput({
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (text.trim()) {
-        onSubmit(text.trim());
-        setText('');
-        setTimeout(resizeTextarea, 0);
-      }
+      submitText(text);
     }
   }
 
   const selectedModelLabel = MODEL_OPTIONS.find(m => m.value === selectedModel)?.label ?? selectedModel;
+  const cmds = filteredCommands();
+  const contextPct = contextMaxTokens > 0 ? Math.min(contextTokens / contextMaxTokens, 1) : 0;
+  const contextColor = contextPct > 0.85 ? '#f14c4c' : contextPct > 0.6 ? '#ffc107' : '#4ec9b0';
 
   return (
     <div className="pill-input-container">
+      {commandQuery !== null && cmds.length > 0 && (
+        <ul className="command-list">
+          {cmds.map((cmd, i) => (
+            <li
+              key={cmd.name}
+              className={i === focusedCommand ? 'focused' : ''}
+              onMouseDown={e => { e.preventDefault(); applyCommand(cmd); }}
+            >
+              <span className="command-list__name">/{cmd.name}</span>
+              <span className="command-list__desc">{cmd.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {mentionQuery !== null && fileSuggestions.length > 0 && (
         <ul className="mention-list">
           {fileSuggestions.map((s, i) => (
@@ -181,13 +261,14 @@ export default function MessageInput({
           </div>
 
           <div className="pill-right-controls">
-            <button className="pill-icon-btn" title="Voice input" aria-label="Voice input">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" x2="12" y1="19" y2="22"/>
-              </svg>
-            </button>
+            {contextTokens > 0 && (
+              <ContextMeter
+                tokens={contextTokens}
+                maxTokens={contextMaxTokens}
+                pct={contextPct}
+                color={contextColor}
+              />
+            )}
             {isWorking ? (
               <button className="pill-stop-btn" title="Stop (Interrupt)" aria-label="Stop" onClick={onInterrupt}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -195,7 +276,7 @@ export default function MessageInput({
                 </svg>
               </button>
             ) : (
-              <button className="pill-send-btn" title="Send (Enter)" aria-label="Send" onClick={() => { if (text.trim()) { onSubmit(text.trim()); setText(''); setTimeout(resizeTextarea, 0); } }}>
+              <button className="pill-send-btn" title="Send (Enter)" aria-label="Send" onClick={() => submitText(text)}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
@@ -204,6 +285,31 @@ export default function MessageInput({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ContextMeter({ tokens, maxTokens, pct, color }: { tokens: number; maxTokens: number; pct: number; color: string }) {
+  const R = 10;
+  const circumference = 2 * Math.PI * R;
+  const dash = pct * circumference;
+  const tooltipText = `Context: ${Math.round(pct * 100)}%\n${tokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens`;
+
+  return (
+    <div className="context-meter" title={tooltipText} aria-label={tooltipText}>
+      <svg width="24" height="24" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r={R} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.15" />
+        <circle
+          cx="12" cy="12" r={R}
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeDasharray={`${dash} ${circumference}`}
+          strokeLinecap="round"
+          transform="rotate(-90 12 12)"
+          style={{ transition: 'stroke-dasharray 0.4s ease' }}
+        />
+      </svg>
     </div>
   );
 }

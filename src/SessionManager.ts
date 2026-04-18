@@ -35,6 +35,9 @@ export class SessionManager {
   private _onRawOutput = new vscode.EventEmitter<{ id: string; data: string }>();
   public readonly onRawOutput = this._onRawOutput.event;
 
+  private _onContextUpdate = new vscode.EventEmitter<{ id: string; tokens: number }>();
+  public readonly onContextUpdate = this._onContextUpdate.event;
+
   setApiKey(key: string): void {
     this.apiKey = key;
     for (const { state } of this.getAllSessions()) {
@@ -70,14 +73,20 @@ export class SessionManager {
     }
   }
 
-  private _persist(): void {
-    if (!this.storageContext) { return; }
+  private _persist(): Thenable<void> {
+    if (!this.storageContext) { return Promise.resolve(); }
     const data: PersistedSession[] = Array.from(this.sessions.entries()).map(([id, state]) => ({
       id,
       label: state.label,
-      history: state.history,
+      history: state.history.map(ev => {
+        // Truncate large tool outputs so we stay within VS Code globalState limits
+        if (ev.type === 'tool_call_output' && ev.output.length > 1000) {
+          return { ...ev, output: ev.output.slice(0, 1000) + '\n…(truncated)' };
+        }
+        return ev;
+      }),
     }));
-    this.storageContext.globalState.update(STORAGE_KEY, data);
+    return this.storageContext.globalState.update(STORAGE_KEY, data);
   }
 
   createSession(cwd?: string): string {
@@ -146,7 +155,7 @@ export class SessionManager {
       this._maybeNotify(sessionId, state);
     }
 
-    this._persist();
+    await this._persist();
   }
 
   respondToPermission(sessionId: string, requestId: string, allowed: boolean): void {
@@ -158,6 +167,9 @@ export class SessionManager {
 
     if (event.type === 'session_finished') {
       state.status = 'finished';
+      if (event.inputTokens) {
+        this._onContextUpdate.fire({ id, tokens: event.inputTokens });
+      }
     } else if (event.type === 'tool_call_end' && event.status === 'failed') {
       state.status = 'error';
     } else if (

@@ -18,16 +18,16 @@
 }
 
 :root {
-  --radius: 6px;
-  --radius-pill: 20px;
-  --gap: 8px;
-  --chat-max-width: 720px;
+  --radius: 8px;
+  --radius-pill: 22px;
+  --gap: 10px;
+  --chat-max-width: 860px;
   --font-mono: var(--vscode-editor-font-family, "Cascadia Code", "Fira Code", monospace);
 }
 
 body {
   font-family: 'Roboto', var(--vscode-font-family, system-ui, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
+  font-size: var(--vscode-font-size, 14px);
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
   height: 100vh;
@@ -78,10 +78,10 @@ body {
   max-width: var(--chat-max-width);
   width: 100%;
   overflow-y: auto;
-  padding: 20px 24px 8px;
+  padding: 24px 28px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   scrollbar-width: thin;
   scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
 }
@@ -91,7 +91,7 @@ body {
 .footer {
   flex-shrink: 0;
   background: var(--vscode-editor-background);
-  padding: 10px 16px 14px;
+  padding: 12px 20px 16px;
   display: flex;
   justify-content: center;
 }
@@ -111,13 +111,13 @@ body {
 .msg__bubble {
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
-  padding: 9px 14px;
-  border-radius: 16px 16px 4px 16px;
-  max-width: 80%;
+  padding: 10px 16px;
+  border-radius: 18px 18px 4px 18px;
+  max-width: 82%;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .msg--assistant {
@@ -322,10 +322,10 @@ body {
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.08));
   border-radius: var(--radius-pill);
-  padding: 10px 14px 8px;
+  padding: 12px 16px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   transition: border-color 0.15s;
 }
 
@@ -339,13 +339,13 @@ body {
   border: none;
   outline: none;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   resize: none;
   overflow-y: auto;
-  line-height: 1.5;
+  line-height: 1.55;
   width: 100%;
-  min-height: 22px;
-  max-height: 200px;
+  min-height: 24px;
+  max-height: 300px;
 }
 
 .pill-textarea::placeholder {
@@ -457,6 +457,68 @@ body {
 }
 
 .pill-send-btn:hover { opacity: 0.85; }
+
+/* ── Command list ─────────────────────────────────────────── */
+
+.command-list {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: var(--radius);
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+}
+
+.command-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.command-list li:hover,
+.command-list li.focused {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.command-list__name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  flex-shrink: 0;
+}
+
+.command-list__desc {
+  font-size: 12px;
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Context meter ────────────────────────────────────────── */
+
+.context-meter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  opacity: 0.7;
+  cursor: default;
+  transition: opacity 0.15s;
+  color: var(--vscode-foreground);
+}
+
+.context-meter:hover { opacity: 1; }
 
 /* ── Mention list ─────────────────────────────────────────── */
 
