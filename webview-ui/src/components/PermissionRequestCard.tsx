@@ -4,12 +4,13 @@ import { vscode } from '../utils/vscode';
 interface Props {
   action: string;
   context: string;
+  requestId: string;
   onRespond: (allowed: boolean) => void;
 }
 
-export default function PermissionRequestCard({ action, context, onRespond }: Props) {
+export default function PermissionRequestCard({ action, context, requestId, onRespond }: Props) {
   function respond(allowed: boolean) {
-    vscode.postMessage({ type: 'respondToPermission', allowed });
+    vscode.postMessage({ type: 'respondToPermission', requestId, allowed });
     onRespond(allowed);
   }
 

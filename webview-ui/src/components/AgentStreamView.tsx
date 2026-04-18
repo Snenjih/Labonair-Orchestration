@@ -95,6 +95,7 @@ export default function AgentStreamView({ history, dismissedPermissions, onPermi
                 key={key}
                 action={event.action}
                 context={event.context}
+                requestId={event.requestId}
                 onRespond={(allowed) => onPermissionRespond(key, allowed)}
               />
             );

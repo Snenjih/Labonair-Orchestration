@@ -65,18 +65,16 @@ export class ChatPanelProvider {
         }
 
         case 'submit': {
-          const { text, config } = message.payload as { text: string; config: { model: string; effort: string } };
+          const { text, config } = message.payload as { text: string; config: { model: string; permissionMode?: string } };
           const claudeProcess = this.sessionManager.getSession(this.sessionId);
-          if (claudeProcess) {
-            if (config?.model) { claudeProcess.setModel(config.model); }
-            claudeProcess.write(text + '\r');
-          }
+          if (config?.model) { claudeProcess?.setModel(config.model); }
+          this.sessionManager.runTurn(this.sessionId, text).catch(console.error);
           break;
         }
 
         case 'respondToPermission': {
-          const claudeProcess = this.sessionManager.getSession(this.sessionId);
-          claudeProcess?.respondToPermission(message.allowed as boolean);
+          const { requestId, allowed } = message as { requestId: string; allowed: boolean };
+          this.sessionManager.respondToPermission(this.sessionId, requestId, allowed);
           break;
         }
       }
