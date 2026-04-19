@@ -49,11 +49,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       id,
       label: state.label,
       status: state.status,
+      parentId: state.parentId,
     }));
     this._view.webview.postMessage({ type: 'sessions', payload: sessions });
   }
 
-  private async _handleMessage(msg: { type: string; sessionId?: string; label?: string; settings?: AgentSettings }): Promise<void> {
+  private async _handleMessage(msg: { type: string; sessionId?: string; label?: string; settings?: AgentSettings; payload?: unknown }): Promise<void> {
     switch (msg.type) {
       case 'newSession':
         vscode.commands.executeCommand('labonair.action.newAgentSession');
@@ -77,6 +78,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         if (msg.settings) {
           await this.context.globalState.update('labonair.settings', msg.settings);
           this.sessionManager.updateSettings(msg.settings);
+          this._view?.webview.postMessage({ type: 'settings', payload: msg.settings });
         }
         break;
     }
@@ -145,6 +147,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       opacity: 1;
       background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.08));
     }
+
+    /* ── Search ── */
+    .search-wrap {
+      padding: 4px 8px 2px;
+      flex-shrink: 0;
+    }
+    .search-input {
+      width: 100%;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+      border-radius: 7px;
+      padding: 5px 10px 5px 28px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      box-sizing: border-box;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: 9px center;
+    }
+    .search-input:focus { border-color: var(--vscode-focusBorder, #007acc); }
 
     /* ── Session list ── */
     .session-list {
@@ -540,6 +564,157 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     .permission-option--danger .permission-option__name { color: #f14c4c; }
     .permission-option--danger .permission-option__desc { color: #f14c4c; opacity: 0.6; }
 
+    /* Trusted tool chips */
+    .trusted-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .trusted-chip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: var(--vscode-badge-background, rgba(14,99,156,0.3));
+      color: var(--vscode-badge-foreground, #fff);
+      font-size: 11px;
+      font-family: var(--vscode-editor-font-family, monospace);
+    }
+    .trusted-chip__remove {
+      border: none;
+      background: none;
+      color: inherit;
+      cursor: pointer;
+      opacity: 0.6;
+      padding: 0;
+      font-size: 13px;
+      line-height: 1;
+      margin-left: 1px;
+    }
+    .trusted-chip__remove:hover { opacity: 1; }
+    .trusted-empty {
+      font-size: 11px;
+      opacity: 0.4;
+    }
+
+    /* MCP servers */
+    .mcp-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mcp-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+      border-radius: 7px;
+      font-size: 11px;
+    }
+    .mcp-item__name { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mcp-item__type { opacity: 0.45; font-size: 10px; text-transform: uppercase; }
+    .mcp-toggle {
+      width: 28px; height: 16px;
+      background: var(--vscode-input-border, #555);
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .mcp-toggle.on { background: var(--vscode-button-background, #0e639c); }
+    .mcp-toggle::after {
+      content: '';
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 2px; left: 2px;
+      transition: left 0.15s;
+    }
+    .mcp-toggle.on::after { left: 14px; }
+    .mcp-delete {
+      border: none; background: none; color: var(--vscode-foreground);
+      opacity: 0.4; cursor: pointer; padding: 2px; border-radius: 4px;
+      transition: opacity 0.12s, color 0.12s;
+    }
+    .mcp-delete:hover { opacity: 1; color: #f14c4c; }
+    .mcp-add-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 10px;
+      background: transparent;
+      border: 1px dashed var(--vscode-input-border, rgba(255,255,255,0.15));
+      border-radius: 7px;
+      color: var(--vscode-foreground);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      opacity: 0.6;
+      width: 100%;
+      transition: opacity 0.12s, background 0.12s;
+    }
+    .mcp-add-btn:hover { opacity: 1; background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.05)); }
+    .mcp-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-focusBorder, #007acc);
+      border-radius: 8px;
+    }
+    .mcp-form input, .mcp-form select {
+      background: var(--vscode-editor-background, #1e1e1e);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .mcp-form input:focus, .mcp-form select:focus { border-color: var(--vscode-focusBorder, #007acc); }
+    .mcp-form-actions { display: flex; gap: 6px; }
+    .mcp-form-actions button {
+      flex: 1;
+      padding: 5px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .mcp-form-actions .btn-save {
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #fff);
+    }
+    .mcp-form-actions .btn-cancel {
+      background: transparent;
+      color: var(--vscode-foreground);
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.15));
+    }
+
+    /* Hooks toggles */
+    .hook-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .hook-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+    }
+    .hook-item__label { flex: 1; font-size: 12px; }
+    .hook-item__hint { font-size: 10.5px; opacity: 0.4; }
+
     /* About card */
     .about-card {
       display: flex;
@@ -585,6 +760,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
+    </div>
+
+    <div class="search-wrap">
+      <input class="search-input" id="searchInput" type="text" placeholder="Search sessions…" aria-label="Search sessions" />
     </div>
 
     <div class="session-list" id="list">
@@ -694,6 +873,62 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         </div>
       </div>
 
+      <!-- Trusted Tools -->
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          Trusted Tools
+        </div>
+        <div class="settings-field">
+          <div class="settings-field__hint">These tools skip permission prompts automatically</div>
+          <div class="trusted-tools" id="trustedToolsList">
+            <span class="trusted-empty">No trusted tools yet</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP Servers -->
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          MCP Servers
+        </div>
+        <div class="mcp-list" id="mcpList"></div>
+        <button class="mcp-add-btn" id="mcpAddBtn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add MCP Server
+        </button>
+        <div class="mcp-form" id="mcpForm" style="display:none">
+          <input id="mcpName" type="text" placeholder="Server name" />
+          <select id="mcpType">
+            <option value="stdio">stdio (command)</option>
+            <option value="sse">SSE (URL)</option>
+            <option value="http">HTTP (URL)</option>
+          </select>
+          <input id="mcpCommandUrl" type="text" placeholder="Command or URL" />
+          <div class="mcp-form-actions">
+            <button class="btn-save" id="mcpSaveBtn">Add</button>
+            <button class="btn-cancel" id="mcpCancelBtn">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hooks / Automations -->
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          Automations (Hooks)
+        </div>
+        <div class="settings-field__hint" style="margin-bottom:6px">Hook events that appear as badges in the chat</div>
+        <div class="hook-list" id="hookList"></div>
+      </div>
+
       <!-- About -->
       <div class="settings-section">
         <div class="about-card">
@@ -718,6 +953,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       defaultModel: 'claude-sonnet-4-6',
       defaultEffort: 'medium',
       permissionMode: 'default',
+      trustedTools: [],
+      mcpServers: [],
+      enabledHooks: [],
     };
 
     // ── View toggle ──
@@ -730,6 +968,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       sessionsView.style.display = 'none';
       settingsView.classList.add('visible');
       settingsBtn.classList.add('active');
+      renderTrustedTools();
+      renderMcpList();
+      renderHookList();
     });
 
     backBtn.addEventListener('click', () => {
@@ -751,6 +992,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       } else if (msg.type === 'settings') {
         currentSettings = { ...currentSettings, ...msg.payload };
         applySettingsToUI();
+        renderTrustedTools();
+        renderMcpList();
+        renderHookList();
       }
     });
 
@@ -769,6 +1013,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       document.querySelectorAll('.permission-option').forEach(opt => {
         opt.classList.toggle('selected', opt.dataset.value === currentSettings.permissionMode);
       });
+
+      // Ensure arrays are initialized
+      if (!Array.isArray(currentSettings.trustedTools)) { currentSettings.trustedTools = []; }
+      if (!Array.isArray(currentSettings.mcpServers)) { currentSettings.mcpServers = []; }
+      if (!Array.isArray(currentSettings.enabledHooks)) { currentSettings.enabledHooks = []; }
     }
 
     function saveSettings() {
@@ -776,6 +1025,123 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       const indicator = document.getElementById('saveIndicator');
       indicator.classList.add('show');
       setTimeout(() => { indicator.classList.remove('show'); }, 1600);
+    }
+
+    // ── Trusted Tools ──
+    function renderTrustedTools() {
+      const el = document.getElementById('trustedToolsList');
+      if (!el) { return; }
+      const tools = currentSettings.trustedTools || [];
+      if (tools.length === 0) {
+        el.innerHTML = '<span class="trusted-empty">No trusted tools yet</span>';
+        return;
+      }
+      el.innerHTML = tools.map(t => \`
+        <div class="trusted-chip">
+          <span>\${escHtml(t)}</span>
+          <button class="trusted-chip__remove" data-tool="\${escHtml(t)}" title="Remove" aria-label="Remove \${escHtml(t)}">×</button>
+        </div>
+      \`).join('');
+      el.querySelectorAll('.trusted-chip__remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tool = btn.dataset.tool;
+          currentSettings.trustedTools = currentSettings.trustedTools.filter(t => t !== tool);
+          saveSettings();
+          renderTrustedTools();
+        });
+      });
+    }
+
+    // ── MCP Servers ──
+    function renderMcpList() {
+      const el = document.getElementById('mcpList');
+      if (!el) { return; }
+      const servers = currentSettings.mcpServers || [];
+      el.innerHTML = servers.map((s, i) => \`
+        <div class="mcp-item">
+          <span class="mcp-item__name">\${escHtml(s.name)}</span>
+          <span class="mcp-item__type">\${escHtml(s.type)}</span>
+          <button class="mcp-toggle \${s.enabled ? 'on' : ''}" data-idx="\${i}" title="\${s.enabled ? 'Disable' : 'Enable'}" aria-pressed="\${s.enabled}"></button>
+          <button class="mcp-delete" data-idx="\${i}" title="Remove" aria-label="Remove \${escHtml(s.name)}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          </button>
+        </div>
+      \`).join('');
+      el.querySelectorAll('.mcp-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.idx);
+          currentSettings.mcpServers[i].enabled = !currentSettings.mcpServers[i].enabled;
+          saveSettings();
+          renderMcpList();
+        });
+      });
+      el.querySelectorAll('.mcp-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.idx);
+          currentSettings.mcpServers.splice(i, 1);
+          saveSettings();
+          renderMcpList();
+        });
+      });
+    }
+
+    document.getElementById('mcpAddBtn').addEventListener('click', () => {
+      document.getElementById('mcpForm').style.display = 'flex';
+      document.getElementById('mcpAddBtn').style.display = 'none';
+    });
+    document.getElementById('mcpCancelBtn').addEventListener('click', () => {
+      document.getElementById('mcpForm').style.display = 'none';
+      document.getElementById('mcpAddBtn').style.display = 'flex';
+    });
+    document.getElementById('mcpSaveBtn').addEventListener('click', () => {
+      const name = document.getElementById('mcpName').value.trim();
+      const type = document.getElementById('mcpType').value;
+      const commandUrl = document.getElementById('mcpCommandUrl').value.trim();
+      if (!name || !commandUrl) { return; }
+      const entry = { name, type, enabled: true };
+      if (type === 'stdio') { entry.command = commandUrl; } else { entry.url = commandUrl; }
+      currentSettings.mcpServers = [...(currentSettings.mcpServers || []), entry];
+      saveSettings();
+      renderMcpList();
+      document.getElementById('mcpName').value = '';
+      document.getElementById('mcpCommandUrl').value = '';
+      document.getElementById('mcpForm').style.display = 'none';
+      document.getElementById('mcpAddBtn').style.display = 'flex';
+    });
+
+    // ── Hooks ──
+    const HOOK_OPTIONS = [
+      { value: 'PreToolUse', label: 'Pre-Tool Use', hint: 'Before each tool executes' },
+      { value: 'PostToolUse', label: 'Post-Tool Use', hint: 'After each tool completes' },
+      { value: 'Notification', label: 'Notification', hint: 'Agent sends a notification' },
+      { value: 'Stop', label: 'Stop', hint: 'When the agent finishes a turn' },
+    ];
+
+    function renderHookList() {
+      const el = document.getElementById('hookList');
+      if (!el) { return; }
+      el.innerHTML = HOOK_OPTIONS.map(h => \`
+        <div class="hook-item">
+          <div class="hook-item__label">
+            \${escHtml(h.label)}
+            <div class="hook-item__hint">\${escHtml(h.hint)}</div>
+          </div>
+          <button class="mcp-toggle \${(currentSettings.enabledHooks || []).includes(h.value) ? 'on' : ''}" data-hook="\${h.value}" title="Toggle \${escHtml(h.label)}" aria-pressed="\${(currentSettings.enabledHooks || []).includes(h.value)}"></button>
+        </div>
+      \`).join('');
+      el.querySelectorAll('.mcp-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const hook = btn.dataset.hook;
+          const hooks = currentSettings.enabledHooks || [];
+          if (hooks.includes(hook)) {
+            currentSettings.enabledHooks = hooks.filter(h => h !== hook);
+          } else {
+            currentSettings.enabledHooks = [...hooks, hook];
+          }
+          saveSettings();
+          renderHookList();
+        });
+      });
     }
 
     // Model select
@@ -807,10 +1173,52 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({ type: 'newSession' });
     });
 
+    // ── Search ──
+    document.getElementById('searchInput').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      document.querySelectorAll('.session').forEach(el => {
+        const label = el.querySelector('.session__label');
+        const text = label ? label.textContent.toLowerCase() : '';
+        el.style.display = (!q || text.includes(q)) ? '' : 'none';
+      });
+    });
+
     // ── Sessions render ──
     function statusLabel(s) {
       if (s === 'permission_required') { return 'waiting'; }
       return s;
+    }
+
+    function sessionCard(s, isChild) {
+      const indent = isChild ? 'style="margin-left:14px;border-left:2px solid var(--vscode-widget-border,rgba(255,255,255,0.1));padding-left:6px;"' : '';
+      const childPrefix = isChild ? '↳ ' : '';
+      if (s.id === renamingId) {
+        return \`<div class="session" data-id="\${s.id}" \${indent}>
+          <span class="session__dot session__dot--\${s.status}"></span>
+          <input class="session__rename" id="rename-\${s.id}" value="\${escHtml(s.label)}" />
+        </div>\`;
+      }
+      return \`<div class="session" data-id="\${s.id}" \${indent}>
+        <span class="session__dot session__dot--\${s.status}"></span>
+        <div class="session__info">
+          <div class="session__label">\${childPrefix}\${escHtml(s.label)}</div>
+          <div class="session__status">\${statusLabel(s.status)}</div>
+        </div>
+        <div class="session__actions">
+          <button class="action-btn action-btn--rename" data-id="\${s.id}" title="Rename">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="action-btn action-btn--delete" data-id="\${s.id}" title="Delete">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+            </svg>
+          </button>
+        </div>
+      </div>\`;
     }
 
     function render() {
@@ -819,35 +1227,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         list.innerHTML = '<p class="empty">No sessions yet.<br/>Click + to start one.</p>';
         return;
       }
-      list.innerHTML = sessions.map(s => {
-        if (s.id === renamingId) {
-          return \`<div class="session" data-id="\${s.id}">
-            <span class="session__dot session__dot--\${s.status}"></span>
-            <input class="session__rename" id="rename-\${s.id}" value="\${escHtml(s.label)}" />
-          </div>\`;
-        }
-        return \`<div class="session" data-id="\${s.id}">
-          <span class="session__dot session__dot--\${s.status}"></span>
-          <div class="session__info">
-            <div class="session__label">\${escHtml(s.label)}</div>
-            <div class="session__status">\${statusLabel(s.status)}</div>
-          </div>
-          <div class="session__actions">
-            <button class="action-btn action-btn--rename" data-id="\${s.id}" title="Rename">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button class="action-btn action-btn--delete" data-id="\${s.id}" title="Delete">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                <path d="M10 11v6"/><path d="M14 11v6"/>
-              </svg>
-            </button>
-          </div>
-        </div>\`;
-      }).join('');
+
+      // Build tree: root sessions first, then children inline
+      const children = {};
+      sessions.forEach(s => { if (s.parentId) { (children[s.parentId] = children[s.parentId] || []).push(s); } });
+      const roots = sessions.filter(s => !s.parentId);
+      const ordered = [];
+      roots.forEach(r => {
+        ordered.push({ s: r, isChild: false });
+        (children[r.id] || []).forEach(c => ordered.push({ s: c, isChild: true }));
+      });
+
+      list.innerHTML = ordered.map(({ s, isChild }) => sessionCard(s, isChild)).join('');
 
       // Wire events
       list.querySelectorAll('.session').forEach(el => {

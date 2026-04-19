@@ -38,8 +38,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ChatPanelProvider.createOrShow(context, sessionId, sessionManager);
     }),
 
-    vscode.commands.registerCommand('labonair.action.focusSession', (sessionId: string) => {
-      ChatPanelProvider.createOrShow(context, sessionId, sessionManager);
+    vscode.commands.registerCommand('labonair.action.focusSession', async (sessionId?: string) => {
+      if (sessionId) {
+        ChatPanelProvider.createOrShow(context, sessionId, sessionManager);
+        return;
+      }
+      const sessions = sessionManager.getAllSessions();
+      if (sessions.length === 0) {
+        vscode.window.showInformationMessage('No sessions open. Create one with Cmd+Shift+A.');
+        return;
+      }
+      const picks = sessions.map(({ id, state }) => ({
+        label: state.label,
+        description: state.status,
+        id,
+      }));
+      const pick = await vscode.window.showQuickPick(picks, { placeHolder: 'Select a session to focus' });
+      if (pick) {
+        ChatPanelProvider.createOrShow(context, pick.id, sessionManager);
+      }
     }),
 
     vscode.commands.registerCommand('labonair.action.deleteSession', (item: vscode.TreeItem) => {
@@ -77,6 +94,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('labonair.action.clearApiKey', async () => {
       await context.secrets.delete('labonair.apiKey');
       vscode.window.showInformationMessage('Labonair: API key removed.');
+    }),
+
+    vscode.commands.registerCommand('labonair.action.importSession', async () => {
+      const uris = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { 'Session JSON': ['json'] },
+        title: 'Import Labonair Session',
+      });
+      if (!uris || uris.length === 0) { return; }
+      try {
+        const raw = await vscode.workspace.fs.readFile(uris[0]);
+        const data = JSON.parse(Buffer.from(raw).toString('utf-8'));
+        const newId = sessionManager.importSession(data);
+        ChatPanelProvider.createOrShow(context, newId, sessionManager);
+      } catch (e) {
+        vscode.window.showErrorMessage(`Labonair: Failed to import session — ${e}`);
+      }
     })
   );
 }

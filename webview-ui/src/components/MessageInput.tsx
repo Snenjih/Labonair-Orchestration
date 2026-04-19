@@ -1,24 +1,22 @@
-import { useEffect, useRef, useState, KeyboardEvent, ChangeEvent } from 'react';
-import { vscode } from '../utils/vscode';
+import { useEffect, useRef, useState, KeyboardEvent, ChangeEvent, ClipboardEvent, useCallback } from 'react';
 
 const MENTION_RE = /(?:^|\s)@([^\s]*)$/;
-const COMMAND_RE = /(?:^|\n)\/([^\s]*)$/;
-const MAX_HEIGHT = 300;
+const COMMAND_RE = /(?:^|\n|\s)\/([^\s]*)$/;
+const MAX_HEIGHT = 600;
 
 interface SlashCommand {
   name: string;
   description: string;
+  argumentHint?: string;
   clientOnly?: boolean;
 }
 
-const SLASH_COMMANDS: SlashCommand[] = [
-  { name: 'clear',    description: 'Clear conversation history',         clientOnly: true },
-  { name: 'compact',  description: 'Summarize and compact context' },
-  { name: 'review',   description: 'Review the current code changes' },
-  { name: 'init',     description: 'Create a CLAUDE.md for this project' },
-  { name: 'think',    description: 'Enable extended reasoning for next reply' },
-  { name: 'help',     description: 'Show available commands and tips' },
-];
+interface ImageAttachment {
+  id: string;
+  dataUrl: string;
+  mediaType: string;
+  name: string;
+}
 
 const MODEL_OPTIONS = [
   { label: 'Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
@@ -36,22 +34,28 @@ const EFFORT_OPTIONS = [
 
 interface Props {
   fileSuggestions: string[];
-  onSubmit: (text: string) => void;
+  slashCommands: SlashCommand[];
+  onSubmit: (text: string, images?: Array<{ mediaType: string; data: string }>) => void;
   onInterrupt: () => void;
   onClear: () => void;
+  onRequestFileSuggestions: (query: string) => void;
+  onRequestSlashCommands: () => void;
   isWorking: boolean;
   selectedModel: string;
   onModelChange: (model: string) => void;
   selectedEffort: string;
   onEffortChange: (effort: string) => void;
+  fastMode?: boolean;
+  onFastModeChange?: (enabled: boolean) => void;
   contextTokens?: number;
   contextMaxTokens?: number;
 }
 
 export default function MessageInput({
-  fileSuggestions, onSubmit, onInterrupt, onClear, isWorking,
-  selectedModel, onModelChange,
-  selectedEffort, onEffortChange,
+  fileSuggestions, slashCommands, onSubmit, onInterrupt, onClear,
+  onRequestFileSuggestions, onRequestSlashCommands,
+  isWorking, selectedModel, onModelChange, selectedEffort, onEffortChange,
+  fastMode = false, onFastModeChange,
   contextTokens = 0, contextMaxTokens = 200000,
 }: Props) {
   const [text, setText] = useState('');
@@ -59,9 +63,13 @@ export default function MessageInput({
   const [focusedSuggestion, setFocusedSuggestion] = useState(0);
   const [commandQuery, setCommandQuery] = useState<string | null>(null);
   const [focusedCommand, setFocusedCommand] = useState(0);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const commandsFetchedRef = useRef(false);
 
   useEffect(() => { setFocusedSuggestion(0); }, [fileSuggestions]);
+  useEffect(() => { setFocusedCommand(0); }, [slashCommands, commandQuery]);
 
   function resizeTextarea() {
     const el = textareaRef.current;
@@ -78,24 +86,29 @@ export default function MessageInput({
       const q = cmdMatch[1].toLowerCase();
       setCommandQuery(q);
       setMentionQuery(null);
-      setFocusedCommand(0);
+      if (!commandsFetchedRef.current) {
+        commandsFetchedRef.current = true;
+        onRequestSlashCommands();
+      }
       return;
     }
     setCommandQuery(null);
 
     const fileMatch = before.match(MENTION_RE);
     if (fileMatch) {
-      setMentionQuery(fileMatch[1]);
-      vscode.postMessage({ type: 'requestFileSuggestions', query: fileMatch[1] });
+      const q = fileMatch[1];
+      setMentionQuery(q);
+      onRequestFileSuggestions(q);
     } else {
       setMentionQuery(null);
     }
   }
 
-  function filteredCommands() {
+  const filteredCommands = useCallback(() => {
     if (commandQuery === null) { return []; }
-    return SLASH_COMMANDS.filter(c => c.name.startsWith(commandQuery));
-  }
+    const q = commandQuery.toLowerCase();
+    return slashCommands.filter(c => c.name.startsWith(q));
+  }, [commandQuery, slashCommands]);
 
   function applyCommand(cmd: SlashCommand) {
     const el = textareaRef.current;
@@ -135,10 +148,15 @@ export default function MessageInput({
 
   function submitText(value: string) {
     const trimmed = value.trim();
-    if (!trimmed) { return; }
+    if (!trimmed && attachments.length === 0) { return; }
     if (trimmed === '/clear') { onClear(); setText(''); setTimeout(resizeTextarea, 0); return; }
-    onSubmit(trimmed);
+    const images = attachments.map(a => ({
+      mediaType: a.mediaType,
+      data: a.dataUrl.split(',')[1],
+    }));
+    onSubmit(trimmed, images.length > 0 ? images : undefined);
     setText('');
+    setAttachments([]);
     setTimeout(resizeTextarea, 0);
   }
 
@@ -163,10 +181,46 @@ export default function MessageInput({
     }
   }
 
+  function addImageFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const mediaType = file.type || 'image/png';
+      setAttachments(prev => [...prev, {
+        id: `${Date.now()}-${Math.random()}`,
+        dataUrl,
+        mediaType,
+        name: file.name,
+      }]);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith('image/'));
+    if (imageItems.length === 0) { return; }
+    e.preventDefault();
+    imageItems.forEach(item => {
+      const file = item.getAsFile();
+      if (file) { addImageFile(file); }
+    });
+  }
+
+  function handleFileInputChange(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    files.forEach(f => addImageFile(f));
+    e.target.value = '';
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }
+
   const selectedModelLabel = MODEL_OPTIONS.find(m => m.value === selectedModel)?.label ?? selectedModel;
   const cmds = filteredCommands();
   const contextPct = contextMaxTokens > 0 ? Math.min(contextTokens / contextMaxTokens, 1) : 0;
-  const contextColor = contextPct > 0.85 ? '#f14c4c' : contextPct > 0.6 ? '#ffc107' : '#4ec9b0';
+  const contextColor = contextTokens === 0 ? 'var(--vscode-foreground)' : contextPct > 0.85 ? '#f14c4c' : contextPct > 0.6 ? '#ffc107' : '#4ec9b0';
 
   return (
     <div className="pill-input-container">
@@ -179,6 +233,7 @@ export default function MessageInput({
               onMouseDown={e => { e.preventDefault(); applyCommand(cmd); }}
             >
               <span className="command-list__name">/{cmd.name}</span>
+              {cmd.argumentHint && <span className="command-list__hint">{cmd.argumentHint}</span>}
               <span className="command-list__desc">{cmd.description}</span>
             </li>
           ))}
@@ -199,19 +254,60 @@ export default function MessageInput({
       )}
 
       <div className="pill-input">
+        {attachments.length > 0 && (
+          <div className="pill-attachments">
+            {attachments.map(a => (
+              <div key={a.id} className="pill-attachment">
+                <img src={a.dataUrl} alt={a.name} className="pill-attachment__thumb" />
+                <button
+                  className="pill-attachment__remove"
+                  onMouseDown={e => { e.preventDefault(); removeAttachment(a.id); }}
+                  title="Remove"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           rows={1}
-          placeholder="Message the agent, tag @files, or use /commands and /skills"
+          placeholder="Message the agent, tag @files, or use /commands"
           className="pill-textarea"
         />
 
         <div className="pill-controls">
           <div className="pill-left-controls">
-            <button className="pill-icon-btn" title="Attach file" aria-label="Attach file">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleFileInputChange}
+            />
+            {onFastModeChange && (
+              <button
+                className={`pill-icon-btn${fastMode ? ' pill-icon-btn--active' : ''}`}
+                title={fastMode ? 'Fast Mode: ON (Haiku)' : 'Fast Mode: OFF'}
+                aria-label="Toggle Fast Mode"
+                onMouseDown={e => { e.preventDefault(); onFastModeChange(!fastMode); }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill={fastMode ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+              </button>
+            )}
+            <button
+              className="pill-icon-btn"
+              title="Attach image"
+              aria-label="Attach image"
+              onMouseDown={e => { e.preventDefault(); fileInputRef.current?.click(); }}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
               </svg>
@@ -261,14 +357,12 @@ export default function MessageInput({
           </div>
 
           <div className="pill-right-controls">
-            {contextTokens > 0 && (
-              <ContextMeter
-                tokens={contextTokens}
-                maxTokens={contextMaxTokens}
-                pct={contextPct}
-                color={contextColor}
-              />
-            )}
+            <ContextMeter
+              tokens={contextTokens}
+              maxTokens={contextMaxTokens}
+              pct={contextPct}
+              color={contextColor}
+            />
             {isWorking ? (
               <button className="pill-stop-btn" title="Stop (Interrupt)" aria-label="Stop" onClick={onInterrupt}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -293,12 +387,15 @@ function ContextMeter({ tokens, maxTokens, pct, color }: { tokens: number; maxTo
   const R = 10;
   const circumference = 2 * Math.PI * R;
   const dash = pct * circumference;
-  const tooltipText = `Context: ${Math.round(pct * 100)}%\n${tokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens`;
+  const remaining = maxTokens - tokens;
+  const tooltipText = tokens === 0
+    ? `Context window: ${maxTokens.toLocaleString()} tokens available`
+    : `Context: ${Math.round(pct * 100)}%\n${tokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens used\n${remaining.toLocaleString()} tokens remaining`;
 
   return (
     <div className="context-meter" title={tooltipText} aria-label={tooltipText}>
       <svg width="24" height="24" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r={R} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.15" />
+        <circle cx="12" cy="12" r={R} fill="none" stroke="currentColor" strokeWidth="2" opacity={pct === 0 ? 0.3 : 0.15} />
         <circle
           cx="12" cy="12" r={R}
           fill="none"

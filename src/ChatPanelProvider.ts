@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { SessionManager } from './SessionManager';
+import { ImageBlock } from './ClaudeProcess';
 import { DEFAULT_AGENT_SETTINGS, AgentSettings } from './shared/types';
+
+const CLEAR_COMMAND = { name: 'clear', description: 'Clear conversation history', clientOnly: true };
 
 export class ChatPanelProvider {
   public static currentPanels: Map<string, ChatPanelProvider> = new Map();
@@ -97,22 +100,49 @@ export class ChatPanelProvider {
           break;
         }
 
+        case 'requestSlashCommands': {
+          const sdkCommands = await this.sessionManager.getSupportedCommands(this.sessionId);
+          const commands = [
+            CLEAR_COMMAND,
+            ...sdkCommands.map(c => ({ name: c.name, description: c.description, argumentHint: c.argumentHint })),
+          ];
+          this.panel.webview.postMessage({ type: 'slash_commands', payload: commands });
+          break;
+        }
+
         case 'requestFileSuggestions': {
+          const query: string = message.query ?? '';
           const folders = vscode.workspace.workspaceFolders;
-          if (!folders) { break; }
-          const pattern = new vscode.RelativePattern(folders[0], `**/*${message.query}*`);
-          const uris = await vscode.workspace.findFiles(pattern, '**/node_modules/**', 10);
+          const base = folders?.[0] ?? null;
+          let uris: vscode.Uri[] = [];
+          if (base) {
+            const glob = query ? `**/*${query}*` : '**/*';
+            const pattern = new vscode.RelativePattern(base, glob);
+            uris = await vscode.workspace.findFiles(pattern, '{**/node_modules/**,**/.git/**,**/dist/**,**/out/**}', 20);
+          }
           const suggestions = uris.map(uri => vscode.workspace.asRelativePath(uri));
           this.panel.webview.postMessage({ type: 'file_suggestions', payload: suggestions });
           break;
         }
 
         case 'submit': {
-          const { text, config } = message.payload as { text: string; config: { model: string; effort?: string } };
+          const { text, config, images } = message.payload as {
+            text: string;
+            config: { model: string; effort?: string };
+            images?: Array<{ mediaType: string; data: string }>;
+          };
           const claudeProcess = this.sessionManager.getSession(this.sessionId);
           if (config?.model) { claudeProcess?.setModel(config.model); }
           if (config?.effort) { claudeProcess?.setEffort(config.effort as any); }
-          this.sessionManager.runTurn(this.sessionId, text).catch(console.error);
+          const imageBlocks: ImageBlock[] = (images ?? []).map(img => ({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: img.mediaType as ImageBlock['source']['media_type'],
+              data: img.data,
+            },
+          }));
+          this.sessionManager.runTurn(this.sessionId, text, imageBlocks).catch(console.error);
           break;
         }
 
@@ -129,7 +159,82 @@ export class ChatPanelProvider {
         }
 
         case 'interrupt': {
-          this.sessionManager.getSession(this.sessionId)?.interrupt();
+          this.sessionManager.interruptSession(this.sessionId).catch(console.error);
+          break;
+        }
+
+        case 'set_fast_mode': {
+          const enabled = message.payload as boolean;
+          this.sessionManager.setFastMode(this.sessionId, enabled).catch(console.error);
+          break;
+        }
+
+        case 'forkSession': {
+          try {
+            const newId = await this.sessionManager.forkSession(this.sessionId);
+            ChatPanelProvider.createOrShow(this.context, newId, this.sessionManager);
+          } catch (e) {
+            vscode.window.showErrorMessage(`Labonair: Fork failed — ${e}`);
+          }
+          break;
+        }
+
+        case 'exportSession': {
+          try {
+            const data = this.sessionManager.exportSession(this.sessionId);
+            const defaultUri = vscode.Uri.file(`${data.label.replace(/[/\\?%*:|"<>]/g, '-')}.json`);
+            const saveUri = await vscode.window.showSaveDialog({
+              defaultUri,
+              filters: { 'Session JSON': ['json'] },
+              title: 'Export Session',
+            });
+            if (saveUri) {
+              await vscode.workspace.fs.writeFile(saveUri, Buffer.from(JSON.stringify(data, null, 2)));
+            }
+          } catch (e) {
+            vscode.window.showErrorMessage(`Labonair: Export failed — ${e}`);
+          }
+          break;
+        }
+
+        case 'exportSessionMarkdown': {
+          try {
+            const data = this.sessionManager.exportSession(this.sessionId);
+            const md = data.history
+              .filter(e => e.type === 'user_message' || e.type === 'agent_message')
+              .map(e => e.type === 'user_message'
+                ? `**User:** ${(e as { text: string }).text}`
+                : `**Claude:** ${(e as { text: string }).text}`)
+              .join('\n\n');
+            const defaultUri = vscode.Uri.file(`${data.label.replace(/[/\\?%*:|"<>]/g, '-')}.md`);
+            const saveUri = await vscode.window.showSaveDialog({
+              defaultUri,
+              filters: { 'Markdown': ['md'] },
+              title: 'Export Session as Markdown',
+            });
+            if (saveUri) {
+              await vscode.workspace.fs.writeFile(saveUri, Buffer.from(md));
+            }
+          } catch (e) {
+            vscode.window.showErrorMessage(`Labonair: Export failed — ${e}`);
+          }
+          break;
+        }
+
+        case 'addTrustedTool': {
+          const toolName = message.payload as string;
+          this.sessionManager.addTrustedTool(toolName);
+          const settings = this.sessionManager.getSettings();
+          await this.context.globalState.update('labonair.settings', settings);
+          break;
+        }
+
+        case 'saveMcpServers': {
+          const servers = message.payload as import('./shared/types').McpServerEntry[];
+          const settings = { ...this.sessionManager.getSettings(), mcpServers: servers };
+          this.sessionManager.updateSettings(settings);
+          await this.context.globalState.update('labonair.settings', settings);
+          this.sessionManager.applyMcpServers(this.sessionId, servers).catch(console.error);
           break;
         }
       }

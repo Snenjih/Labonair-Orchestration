@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { vscode } from '../utils/vscode';
 
@@ -9,7 +10,12 @@ interface Props {
 }
 
 export default function PermissionRequestCard({ action, context, requestId, onRespond }: Props) {
+  const [alwaysAllow, setAlwaysAllow] = useState(false);
+
   function respond(allowed: boolean) {
+    if (allowed && alwaysAllow) {
+      vscode.postMessage({ type: 'addTrustedTool', payload: action });
+    }
     vscode.postMessage({ type: 'respondToPermission', requestId, allowed });
     onRespond(allowed);
   }
@@ -22,6 +28,14 @@ export default function PermissionRequestCard({ action, context, requestId, onRe
       </div>
       <p className="perm-card__action"><strong>{action}</strong></p>
       <p className="perm-card__context">{context}</p>
+      <label className="perm-card__always-allow">
+        <input
+          type="checkbox"
+          checked={alwaysAllow}
+          onChange={e => setAlwaysAllow(e.target.checked)}
+        />
+        Always allow this tool
+      </label>
       <div className="perm-card__actions">
         <button className="btn btn--accept" onClick={() => respond(true)}>Accept</button>
         <button className="btn btn--deny" onClick={() => respond(false)}>Deny</button>

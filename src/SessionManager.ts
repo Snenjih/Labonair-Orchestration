@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import { forkSession as sdkForkSession } from '@anthropic-ai/claude-agent-sdk';
 import type { EffortLevel, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import { ClaudeProcess } from './ClaudeProcess';
-import { ParsedEvent, SessionStatus, AgentSettings, DEFAULT_AGENT_SETTINGS } from './shared/types';
+import { ClaudeProcess, ImageBlock } from './ClaudeProcess';
+import { ParsedEvent, SessionStatus, AgentSettings, DEFAULT_AGENT_SETTINGS, McpServerEntry } from './shared/types';
 import { translateSdkMessage } from './parser/SdkEventTranslator';
 
 export interface SessionState {
@@ -10,12 +11,22 @@ export interface SessionState {
   history: ParsedEvent[];
   status: SessionStatus;
   label: string;
+  parentId?: string;
+}
+
+export interface ExportedSession {
+  version: 1;
+  label: string;
+  history: ParsedEvent[];
+  exportedAt: string;
 }
 
 interface PersistedSession {
   id: string;
   label: string;
   history: ParsedEvent[];
+  workspaceRoot: string;
+  parentId?: string;
 }
 
 const STORAGE_KEY = 'labonair.sessions';
@@ -25,6 +36,7 @@ export class SessionManager {
   private apiKey: string | undefined;
   private storageContext: vscode.ExtensionContext | undefined;
   private settings: AgentSettings = { ...DEFAULT_AGENT_SETTINGS };
+  private currentWorkspaceRoot: string = '';
 
   public isPanelVisible: (sessionId: string) => boolean = () => false;
 
@@ -49,6 +61,90 @@ export class SessionManager {
 
   updateSettings(settings: AgentSettings): void {
     this.settings = { ...settings };
+    for (const { state } of this.getAllSessions()) {
+      state.process.setTrustedTools(settings.trustedTools ?? []);
+    }
+  }
+
+  addTrustedTool(toolName: string): void {
+    if (!this.settings.trustedTools.includes(toolName)) {
+      this.settings.trustedTools = [...this.settings.trustedTools, toolName];
+      for (const { state } of this.getAllSessions()) {
+        state.process.setTrustedTools(this.settings.trustedTools);
+      }
+    }
+  }
+
+  async forkSession(sessionId: string, title?: string): Promise<string> {
+    const sourceState = this.sessions.get(sessionId);
+    if (!sourceState) { throw new Error('Session not found'); }
+
+    const result = await sdkForkSession(sessionId, { title });
+    const newId = result.sessionId;
+    const cwd = this.currentWorkspaceRoot;
+
+    const claudeProcess = new ClaudeProcess(
+      cwd,
+      this.settings.defaultModel,
+      this.settings.permissionMode as PermissionMode,
+      this.settings.defaultEffort as EffortLevel,
+      this.apiKey,
+      this.settings.trustedTools ?? []
+    );
+
+    const label = title ?? `${sourceState.label} (fork)`;
+    const newState: SessionState = {
+      process: claudeProcess,
+      history: [...sourceState.history],
+      status: 'idle',
+      label,
+      parentId: sessionId,
+    };
+
+    this._wireProcess(newId, claudeProcess, newState);
+    this.sessions.set(newId, newState);
+    this._onDidChangeSessions.fire();
+    await this._persist();
+    return newId;
+  }
+
+  exportSession(sessionId: string): ExportedSession {
+    const state = this.sessions.get(sessionId);
+    if (!state) { throw new Error('Session not found'); }
+    return {
+      version: 1,
+      label: state.label,
+      history: state.history,
+      exportedAt: new Date().toISOString(),
+    };
+  }
+
+  importSession(data: ExportedSession): string {
+    const id = crypto.randomUUID();
+    const cwd = this.currentWorkspaceRoot;
+    const claudeProcess = new ClaudeProcess(
+      cwd,
+      this.settings.defaultModel,
+      this.settings.permissionMode as PermissionMode,
+      this.settings.defaultEffort as EffortLevel,
+      this.apiKey,
+      this.settings.trustedTools ?? []
+    );
+    const state: SessionState = {
+      process: claudeProcess,
+      history: data.history ?? [],
+      status: 'finished',
+      label: data.label ?? `Imported Session`,
+    };
+    this._wireProcess(id, claudeProcess, state);
+    this.sessions.set(id, state);
+    this._onDidChangeSessions.fire();
+    this._persist();
+    return id;
+  }
+
+  async applyMcpServers(sessionId: string, servers: McpServerEntry[]): Promise<void> {
+    await this.sessions.get(sessionId)?.process.applyMcpServers(servers);
   }
 
   getSettings(): AgentSettings { return { ...this.settings }; }
@@ -70,21 +166,25 @@ export class SessionManager {
   /** Call once on activate to enable persistence. */
   loadFromStorage(context: vscode.ExtensionContext): void {
     this.storageContext = context;
-    const persisted = context.globalState.get<PersistedSession[]>(STORAGE_KEY, []);
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    this.currentWorkspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const allPersisted = context.globalState.get<PersistedSession[]>(STORAGE_KEY, []);
+    const persisted = allPersisted.filter(s => s.workspaceRoot === this.currentWorkspaceRoot);
+    const cwd = this.currentWorkspaceRoot;
     for (const saved of persisted) {
       const claudeProcess = new ClaudeProcess(
         cwd,
         this.settings.defaultModel,
         this.settings.permissionMode as PermissionMode,
         this.settings.defaultEffort as EffortLevel,
-        this.apiKey
+        this.apiKey,
+        this.settings.trustedTools ?? []
       );
       const state: SessionState = {
         process: claudeProcess,
         history: saved.history,
         status: 'finished',
         label: saved.label,
+        parentId: saved.parentId,
       };
       this._wireProcess(saved.id, claudeProcess, state);
       this.sessions.set(saved.id, state);
@@ -96,18 +196,22 @@ export class SessionManager {
 
   private _persist(): Thenable<void> {
     if (!this.storageContext) { return Promise.resolve(); }
-    const data: PersistedSession[] = Array.from(this.sessions.entries()).map(([id, state]) => ({
+    const otherWorkspaceSessions = this.storageContext.globalState
+      .get<PersistedSession[]>(STORAGE_KEY, [])
+      .filter(s => s.workspaceRoot !== this.currentWorkspaceRoot);
+    const currentWorkspaceSessions: PersistedSession[] = Array.from(this.sessions.entries()).map(([id, state]) => ({
       id,
       label: state.label,
+      workspaceRoot: this.currentWorkspaceRoot,
+      parentId: state.parentId,
       history: state.history.map(ev => {
-        // Truncate large tool outputs so we stay within VS Code globalState limits
         if (ev.type === 'tool_call_output' && ev.output.length > 1000) {
           return { ...ev, output: ev.output.slice(0, 1000) + '\n…(truncated)' };
         }
         return ev;
       }),
     }));
-    return this.storageContext.globalState.update(STORAGE_KEY, data);
+    return this.storageContext.globalState.update(STORAGE_KEY, [...otherWorkspaceSessions, ...currentWorkspaceSessions]);
   }
 
   createSession(cwd?: string): string {
@@ -120,7 +224,8 @@ export class SessionManager {
       this.settings.defaultModel,
       this.settings.permissionMode as PermissionMode,
       this.settings.defaultEffort as EffortLevel,
-      this.apiKey
+      this.apiKey,
+      this.settings.trustedTools ?? []
     );
     const state: SessionState = {
       process: claudeProcess,
@@ -154,9 +259,15 @@ export class SessionManager {
     claudeProcess.onRawOutput((data) => {
       this._onRawOutput.fire({ id, data });
     });
+
+    claudeProcess.onHookEvent(({ hookType, message }) => {
+      const event: ParsedEvent = { type: 'hook_event', hookType, message };
+      state.history.push(event);
+      this._onParsedEvent.fire({ id, event });
+    });
   }
 
-  async runTurn(sessionId: string, text: string): Promise<void> {
+  async runTurn(sessionId: string, text: string, imageBlocks: ImageBlock[] = []): Promise<void> {
     const state = this.sessions.get(sessionId);
     if (!state) { return; }
 
@@ -176,7 +287,7 @@ export class SessionManager {
     this._onDidChangeSessions.fire();
 
     try {
-      for await (const message of state.process.startTurn(text)) {
+      for await (const message of state.process.startTurn(text, imageBlocks)) {
         const events = translateSdkMessage(message);
         for (const event of events) {
           state.history.push(event);
@@ -195,6 +306,24 @@ export class SessionManager {
 
   respondToPermission(sessionId: string, requestId: string, allowed: boolean): void {
     this.sessions.get(sessionId)?.process.respondToPermission(requestId, allowed);
+  }
+
+  async interruptSession(sessionId: string): Promise<void> {
+    await this.sessions.get(sessionId)?.process.interrupt();
+  }
+
+  async setFastMode(sessionId: string, enabled: boolean): Promise<void> {
+    await this.sessions.get(sessionId)?.process.setFastMode(enabled);
+  }
+
+  async getSupportedCommands(sessionId: string): Promise<{ name: string; description: string; argumentHint: string }[]> {
+    const process = this.sessions.get(sessionId)?.process;
+    if (!process) { return []; }
+    try {
+      return await process.getSupportedCommands();
+    } catch {
+      return [];
+    }
   }
 
   private _updateStatus(id: string, state: SessionState, event: ParsedEvent): void {

@@ -7,8 +7,18 @@ import {
   type PermissionResult,
   type PermissionMode,
   type EffortLevel,
+  type SlashCommand,
 } from '@anthropic-ai/claude-agent-sdk';
 import * as crypto from 'crypto';
+
+export interface ImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    data: string;
+  };
+}
 
 type AsyncInput<T> = { push: (item: T) => void; end: () => void; iterable: AsyncIterable<T> };
 
@@ -47,6 +57,7 @@ export class ClaudeProcess {
   private permissionMode: PermissionMode;
   private effort: EffortLevel | undefined;
   private apiKey: string | undefined;
+  private trustedTools: string[];
   private activeQuery: Query | null = null;
   private inputStream: AsyncInput<SDKUserMessage> | null = null;
   private pendingPermissions = new Map<string, (result: PermissionResult) => void>();
@@ -57,47 +68,68 @@ export class ClaudeProcess {
   private _onPermissionRequest = new vscode.EventEmitter<{ requestId: string; toolName: string; input: unknown }>();
   public readonly onPermissionRequest = this._onPermissionRequest.event;
 
-  constructor(cwd: string, model = 'claude-sonnet-4-6', permissionMode: PermissionMode = 'default', effort?: EffortLevel, apiKey?: string) {
+  private _onHookEvent = new vscode.EventEmitter<{ hookType: string; message: string }>();
+  public readonly onHookEvent = this._onHookEvent.event;
+
+  constructor(cwd: string, model = 'claude-sonnet-4-6', permissionMode: PermissionMode = 'default', effort?: EffortLevel, apiKey?: string, trustedTools: string[] = []) {
     this.cwd = cwd;
     this.model = model;
     this.permissionMode = permissionMode;
     this.effort = effort;
     this.apiKey = apiKey;
+    this.trustedTools = trustedTools;
   }
 
-  async *startTurn(text: string): AsyncGenerator<SDKMessage> {
-    if (!this.activeQuery || !this.inputStream) {
-      this.inputStream = createAsyncInput<SDKUserMessage>();
-      this.activeQuery = query({
-        prompt: this.inputStream.iterable,
-        options: {
-          cwd: this.cwd,
-          model: this.model,
-          permissionMode: this.permissionMode,
-          settingSources: ['user', 'project'],
-          ...(this.effort ? { effort: this.effort } : {}),
-          ...(this.apiKey ? { env: { ANTHROPIC_API_KEY: this.apiKey } } : {}),
-          canUseTool: async (toolName: string, input: unknown) => {
-            const requestId = `perm-${crypto.randomUUID()}`;
-            return new Promise<PermissionResult>(resolve => {
-              this.pendingPermissions.set(requestId, resolve);
-              this._onPermissionRequest.fire({ requestId, toolName, input });
-            });
-          },
-          stderr: (data: string) => {
-            this._onRawOutput.fire(data);
-          },
-        },
-      });
-    }
+  setTrustedTools(tools: string[]): void { this.trustedTools = tools; }
 
-    this.inputStream.push({
+  private _ensureQuery(): void {
+    if (this.activeQuery && this.inputStream) { return; }
+    this.inputStream = createAsyncInput<SDKUserMessage>();
+    this.activeQuery = query({
+      prompt: this.inputStream.iterable,
+      options: {
+        cwd: this.cwd,
+        model: this.model,
+        permissionMode: this.permissionMode,
+        settingSources: ['user', 'project'],
+        ...(this.effort ? { effort: this.effort } : {}),
+        ...(this.apiKey ? { env: { ANTHROPIC_API_KEY: this.apiKey } } : {}),
+        canUseTool: async (toolName: string, input: unknown) => {
+          if (this.trustedTools.includes(toolName)) {
+            return { behavior: 'allow', updatedInput: {}, updatedPermissions: [] };
+          }
+          const requestId = `perm-${crypto.randomUUID()}`;
+          return new Promise<PermissionResult>(resolve => {
+            this.pendingPermissions.set(requestId, resolve);
+            this._onPermissionRequest.fire({ requestId, toolName, input });
+          });
+        },
+        stderr: (data: string) => {
+          this._onRawOutput.fire(data);
+        },
+      },
+    });
+  }
+
+  async getSupportedCommands(): Promise<SlashCommand[]> {
+    this._ensureQuery();
+    return this.activeQuery!.supportedCommands();
+  }
+
+  async *startTurn(text: string, imageBlocks: ImageBlock[] = []): AsyncGenerator<SDKMessage> {
+    this._ensureQuery();
+
+    const content: unknown = imageBlocks.length > 0
+      ? [...imageBlocks, { type: 'text', text }]
+      : text;
+
+    this.inputStream!.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content } as any,
       parent_tool_use_id: null,
     });
 
-    for await (const message of this.activeQuery) {
+    for await (const message of this.activeQuery!) {
       yield message;
       if (message.type === 'result') { break; }
     }
@@ -119,8 +151,31 @@ export class ClaudeProcess {
   clearApiKey(): void { this.apiKey = undefined; }
   setPermissionMode(mode: PermissionMode): void { this.permissionMode = mode; }
 
-  interrupt(): void {
-    (this.activeQuery as any)?.abort?.();
+  async setFastMode(enabled: boolean): Promise<void> {
+    if (!this.activeQuery) { return; }
+    await this.activeQuery.setModel(enabled ? 'claude-haiku-4-5-20251001' : this.model);
+  }
+
+  async applyMcpServers(servers: import('./shared/types').McpServerEntry[]): Promise<void> {
+    if (!this.activeQuery) { return; }
+    const enabled = servers.filter(s => s.enabled);
+    const mcpRecord: Record<string, import('@anthropic-ai/claude-agent-sdk').McpServerConfig> = {};
+    for (const s of enabled) {
+      if (s.type === 'stdio' && s.command) {
+        mcpRecord[s.name] = { type: 'stdio', command: s.command };
+      } else if (s.type === 'sse' && s.url) {
+        mcpRecord[s.name] = { type: 'sse', url: s.url };
+      } else if (s.type === 'http' && s.url) {
+        mcpRecord[s.name] = { type: 'http', url: s.url };
+      }
+    }
+    await this.activeQuery.setMcpServers(mcpRecord);
+  }
+
+  async interrupt(): Promise<void> {
+    if (this.activeQuery) {
+      await this.activeQuery.interrupt();
+    }
   }
 
   dispose(): void {
@@ -129,5 +184,6 @@ export class ClaudeProcess {
     this.inputStream = null;
     this._onRawOutput.dispose();
     this._onPermissionRequest.dispose();
+    this._onHookEvent.dispose();
   }
 }

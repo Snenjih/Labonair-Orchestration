@@ -4,6 +4,7 @@ import { UserMessage, AssistantMessage } from './Message';
 import ThoughtItem from './ThoughtItem';
 import ToolCall from './ToolCall';
 import PermissionRequestCard from './PermissionRequestCard';
+import HookEventBadge from './HookEventBadge';
 
 interface ToolCallGroup {
   kind: 'tool_call';
@@ -100,6 +101,8 @@ export default function AgentStreamView({ history, dismissedPermissions, onPermi
                 onRespond={(allowed) => onPermissionRespond(key, allowed)}
               />
             );
+          case 'hook_event':
+            return <HookEventBadge key={key} hookType={event.hookType} message={event.message} />;
           default:
             return null;
         }

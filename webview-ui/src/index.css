@@ -46,8 +46,8 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 8px 16px;
+  justify-content: space-between;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--vscode-panel-border);
   background: var(--vscode-titleBar-activeBackground, var(--vscode-editor-background));
   flex-shrink: 0;
@@ -59,6 +59,33 @@ body {
   opacity: 0.5;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  flex: 1;
+  text-align: center;
+}
+
+.app-header__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-header__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+.app-header__btn:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.08));
 }
 
 /* ── Content area ─────────────────────────────────────────── */
@@ -86,6 +113,41 @@ body {
   scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
 }
 
+/* ── Empty state ──────────────────────────────────────────── */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 10px;
+  user-select: none;
+}
+
+.empty-state__ghost {
+  width: 64px;
+  height: 64px;
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.empty-state__title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  opacity: 0.85;
+  letter-spacing: 0.01em;
+}
+
+.empty-state__subtitle {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* ── Footer ───────────────────────────────────────────────── */
 
 .footer {
@@ -106,6 +168,48 @@ body {
 
 .msg--user {
   align-items: flex-end;
+}
+
+.msg__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.msg__row--assistant {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.msg__row--assistant .msg__copy-btn {
+  align-self: flex-start;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.msg__copy-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  padding: 3px;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.msg__copy-btn:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.08));
+}
+
+.msg:hover .msg__copy-btn {
+  display: flex;
 }
 
 .msg__bubble {
@@ -321,8 +425,8 @@ body {
 .pill-input {
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.08));
-  border-radius: var(--radius-pill);
-  padding: 12px 16px 10px;
+  border-radius: 12px;
+  padding: 16px 20px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -339,13 +443,13 @@ body {
   border: none;
   outline: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 16px;
   resize: none;
   overflow-y: auto;
-  line-height: 1.55;
+  line-height: 1.6;
   width: 100%;
-  min-height: 24px;
-  max-height: 300px;
+  min-height: 48px;
+  max-height: 600px;
 }
 
 .pill-textarea::placeholder {
@@ -379,10 +483,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   background: transparent;
   color: var(--vscode-foreground);
   opacity: 0.5;
@@ -419,11 +523,12 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
-  border-radius: 20px;
+  padding: 6px 10px;
+  height: 34px;
+  border-radius: 8px;
   background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.06));
   color: var(--vscode-foreground);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   opacity: 0.8;
   cursor: pointer;
@@ -445,10 +550,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
   cursor: pointer;
@@ -493,6 +598,13 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--vscode-foreground);
+  flex-shrink: 0;
+}
+
+.command-list__hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.45;
   flex-shrink: 0;
 }
 
@@ -774,10 +886,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #f14c4c;
   color: #fff;
   cursor: pointer;
@@ -786,6 +898,57 @@ body {
 }
 
 .pill-stop-btn:hover { opacity: 0.85; }
+
+/* ── Image attachments ────────────────────────────────────── */
+
+.pill-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.pill-attachment {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border);
+  flex-shrink: 0;
+}
+
+.pill-attachment__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pill-attachment__remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pill-attachment:hover .pill-attachment__remove {
+  opacity: 1;
+}
 
 /* ── Spinner animation ────────────────────────────────────── */
 
@@ -796,4 +959,101 @@ body {
 .spin {
   animation: spin 1s linear infinite;
   display: inline-block;
+}
+
+/* ── Fast mode button active state ───────────────────────── */
+.pill-icon-btn--active {
+  color: #ffc107;
+  opacity: 1 !important;
+}
+
+/* ── Diff view ────────────────────────────────────────────── */
+.diff-view {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.diff-line {
+  display: flex;
+  gap: 6px;
+  padding: 1px 8px;
+}
+
+.diff-line--added {
+  background: rgba(78, 201, 176, 0.12);
+  color: #4ec9b0;
+}
+
+.diff-line--removed {
+  background: rgba(241, 76, 76, 0.12);
+  color: #f14c4c;
+}
+
+.diff-line--context {
+  opacity: 0.6;
+}
+
+.diff-line__sign {
+  flex-shrink: 0;
+  width: 14px;
+  user-select: none;
+  font-weight: 700;
+}
+
+.diff-line__text {
+  flex: 1;
+  white-space: pre;
+}
+
+/* ── Hook event badge ─────────────────────────────────────── */
+.hook-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--vscode-badge-background, rgba(255,255,255,0.08));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  font-size: 11px;
+  opacity: 0.7;
+  margin: 4px 0;
+  max-width: fit-content;
+}
+
+.hook-badge__type {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.hook-badge__message {
+  opacity: 0.85;
+}
+
+/* ── Permission card: always-allow ───────────────────────── */
+.perm-card__always-allow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-top: 4px;
+  user-select: none;
+}
+
+.perm-card__always-allow input[type="checkbox"] {
+  accent-color: var(--vscode-button-background, #0e639c);
+  cursor: pointer;
+}
+
+.perm-card__always-allow:hover {
+  opacity: 1;
 }
