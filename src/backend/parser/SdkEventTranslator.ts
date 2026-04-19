@@ -1,5 +1,5 @@
 import { type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { type ParsedEvent } from '../shared/types';
+import { type ParsedEvent } from '../../shared/types';
 
 export function translateSdkMessage(message: SDKMessage): ParsedEvent[] {
   const events: ParsedEvent[] = [];

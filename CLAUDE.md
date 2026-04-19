@@ -31,38 +31,53 @@ Developers want a persistent AI agent that:
 ```
 / (repo root = extension root)
   src/
-    extension.ts              — Activation entry; registers commands & providers
-    SessionManager.ts         — Map<SessionId, SessionState>; drives runTurn(); emits events
-    ClaudeProcess.ts          — SDK query wrapper; push-based async iterable input; permission callbacks
-    ChatPanelProvider.ts      — Webview panel lifecycle; RPC routing; forwards events to webview
-    SidebarProvider.ts        — TreeDataProvider; reflects SessionManager state with status icons
     shared/
-      types.ts                — ParsedEvent union + SessionStatus (shared by host & webview)
-    parser/
-      SdkEventTranslator.ts   — Translates SDKMessage → ParsedEvent[] (no regex, no ANSI)
-  webview-ui/                 — Vite + React source (compiled → dist/webview/)
-    src/
-      App.tsx                 — Root component; handles all RPC messages from host
-      main.tsx                — React entry point (createRoot)
-      types.ts                — Browser-safe mirror of src/shared/types.ts
-      utils/vscode.ts         — acquireVsCodeApi singleton wrapper
-      components/
-        AgentStreamView.tsx   — Reduces flat ParsedEvent[] into display groups
-        Message.tsx           — UserMessage + AssistantMessage (react-markdown + Prism)
-        ThoughtItem.tsx        — Collapsible thinking block
-        ToolCall.tsx           — Collapsible tool call with status icon
-        PermissionRequestCard.tsx — Accept/Deny card; sends requestId back to host
-        MessageInput.tsx       — Auto-resize textarea with @file mention support
-        AgentFormDropdowns.tsx — Model selector dropdown
-        TerminalEmulator.tsx   — xterm.js terminal (shows stderr from Claude process)
-        ViewToggles.tsx        — UI / Terminal / Split segmented control
-    vite.config.ts            — Outputs to ../dist/webview/assets/ (deterministic filenames)
+      types.ts                — ParsedEvent union + AgentSettings (imported by backend AND both frontends)
+    backend/                  — Extension Host (Node.js + VS Code API, compiled by tsc → out/backend/)
+      extension.ts            — Activation entry; registers commands & providers
+      SessionManager.ts       — Map<SessionId, SessionState>; drives runTurn(); emits events
+      ClaudeProcess.ts        — SDK query wrapper; push-based async iterable input; permission callbacks
+      ChatPanelProvider.ts    — Webview panel lifecycle; RPC routing; forwards events to webview
+      SidebarProvider.ts      — TreeDataProvider; reflects SessionManager state with status icons
+      parser/
+        SdkEventTranslator.ts — Translates SDKMessage → ParsedEvent[] (no regex, no ANSI)
+    frontend/
+      desktop/                — VS Code Webview UI (Vite + React → dist/webview/)
+        index.html            — Vite entry point (root: src/frontend/desktop)
+        App.tsx               — Root component; handles all RPC messages from host
+        main.tsx              — React entry point (createRoot)
+        index.css             — Global styles
+        assets/               — Static assets (fonts)
+        components/
+          AgentStreamView.tsx — Reduces flat ParsedEvent[] into display groups
+          Message.tsx         — UserMessage + AssistantMessage (react-markdown + Prism)
+          ThoughtItem.tsx     — Collapsible thinking block
+          ToolCall.tsx        — Collapsible tool call with status icon + diff view
+          PermissionRequestCard.tsx — Accept/Deny card; sends requestId back to host
+          MessageInput.tsx    — Auto-resize textarea with @file mention support
+          HookEventBadge.tsx  — Inline hook event display
+          ApiKeySetup.tsx     — First-run API key setup screen
+        utils/
+          vscode.ts           — acquireVsCodeApi singleton wrapper
+      app/                    — Mobile Companion App (Vite + React → dist/mobile/, Phase 6)
+        index.html
+        App.tsx               — Scaffold placeholder; full UI built in Phase 6
+        main.tsx
+  vite.desktop.config.ts      — Desktop webview build (root: src/frontend/desktop)
+  vite.app.config.ts          — Mobile app build (root: src/frontend/app)
+  tsconfig.json               — Backend TS config (include: src/backend + src/shared → out/)
+  tsconfig.frontend.json      — Frontend TS config (DOM lib, @shared alias, noEmit)
   .vscode/
     launch.json               — "Run Extension" debug config (extensionHost)
     tasks.json                — Default build task: npm run compile
-  dist/webview/               — Built React assets (gitignored)
+  dist/webview/               — Built desktop webview assets (gitignored)
+  dist/mobile/                — Built mobile app assets (gitignored)
   out/                        — Compiled extension JS (tsc output, gitignored)
 ```
+
+### Key structural rules
+- `src/shared/types.ts` is the **single source of truth** for `ParsedEvent`, `AgentSettings`, etc. — no more manual mirroring. Both frontends import via the `@shared` Vite alias.
+- `src/backend/` = Node.js only. `src/frontend/` = browser only. Never cross-import Node modules into frontend.
 
 ---
 
@@ -145,15 +160,26 @@ Converts `SDKMessage` → `ParsedEvent[]`:
 ## Build & Debug
 
 ```bash
-# Full build (webview + TypeScript)
+# Full build (both frontends + backend TypeScript)
 npm run compile
 
-# Webview only
+# Desktop webview only
 npm run build:webview
 
-# TypeScript only
+# Mobile app only
+npm run build:app
+
+# Both frontends
+npm run build:frontend
+
+# Frontend type-check (no emit)
+npm run typecheck:frontend
+
+# Backend TypeScript only
 tsc -p ./
 ```
+
+**Extension entry point:** `out/backend/extension.js` (package.json `main`)
 
 **Debug:** Open this folder in VS Code → press **F5** → "Run Extension" launches Extension Development Host.
 
@@ -184,6 +210,7 @@ tsc -p ./
 - ✅ Phase D1 — Diff View: `ToolCall.tsx` renders colored diff for Edit/Write/str_replace_editor tools
 - ✅ Phase D2 — MCP Server Config: Add/remove/toggle MCP servers in Settings → `Query.setMcpServers()`
 - ✅ Phase D3 — Hooks System: `hook_event` ParsedEvent, `enabledHooks` in AgentSettings, Hooks toggles in Settings, `HookEventBadge` in chat
+- ✅ Phase E0 — Repo Refactor: Unified src/ structure (`src/backend/`, `src/frontend/desktop/`, `src/frontend/app/`, `src/shared/`); single package.json; `@shared` Vite alias eliminates manual type mirroring; `vite.desktop.config.ts` + `vite.app.config.ts`
 
 **Effort:** `EffortLevel` ('low'|'medium'|'high'|'xhigh'|'max') passed via query options in ClaudeProcess.ts.
 

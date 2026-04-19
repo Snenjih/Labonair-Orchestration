@@ -7,9 +7,19 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "main": "./out/extension.js",
+  "main": "./out/backend/extension.js",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.112"
+    "@anthropic-ai/claude-agent-sdk": "^0.2.112",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "prismjs": "^1.29.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "tailwind-merge": "^2.5.4"
   },
   "contributes": {
     "viewsContainers": {
@@ -98,12 +108,20 @@
     }
   },
   "scripts": {
-    "build:webview": "cd webview-ui && npm install && npm run build",
-    "compile": "npm run build:webview && tsc -p ./"
+    "build:webview": "vite build --config vite.desktop.config.ts",
+    "build:app": "vite build --config vite.app.config.ts",
+    "build:frontend": "npm run build:webview && npm run build:app",
+    "compile": "npm run build:frontend && tsc -p ./",
+    "typecheck:frontend": "tsc -p tsconfig.frontend.json"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "@types/prismjs": "^1.26.4",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
     "@types/vscode": "^1.90.0",
-    "typescript": "^6.0.2"
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^6.0.2",
+    "vite": "^5.4.10"
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { vscode } from './utils/vscode';
-import { ParsedEvent } from './types';
+import { ParsedEvent } from '@shared/types';
 import AgentStreamView from './components/AgentStreamView';
 import MessageInput from './components/MessageInput';
 import ApiKeySetup from './components/ApiKeySetup';

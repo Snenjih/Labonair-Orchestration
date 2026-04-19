@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { SessionManager } from './SessionManager';
 import { ImageBlock } from './ClaudeProcess';
-import { DEFAULT_AGENT_SETTINGS, AgentSettings } from './shared/types';
+import { DEFAULT_AGENT_SETTINGS, AgentSettings } from '../shared/types';
 
 const CLEAR_COMMAND = { name: 'clear', description: 'Clear conversation history', clientOnly: true };
 
@@ -230,7 +230,7 @@ export class ChatPanelProvider {
         }
 
         case 'saveMcpServers': {
-          const servers = message.payload as import('./shared/types').McpServerEntry[];
+          const servers = message.payload as import('../shared/types').McpServerEntry[];
           const settings = { ...this.sessionManager.getSettings(), mcpServers: servers };
           this.sessionManager.updateSettings(settings);
           await this.context.globalState.update('labonair.settings', settings);

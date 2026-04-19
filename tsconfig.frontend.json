@@ -9,7 +9,10 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src/frontend", "src/shared"]
 }

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { SessionManager } from './SessionManager';
-import { AgentSettings, DEFAULT_AGENT_SETTINGS } from './shared/types';
+import { AgentSettings, DEFAULT_AGENT_SETTINGS } from '../shared/types';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'labonair.views.agentSessions';

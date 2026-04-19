@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ParsedEvent } from '../types';
+import { ParsedEvent } from '@shared/types';
 import { UserMessage, AssistantMessage } from './Message';
 import ThoughtItem from './ThoughtItem';
 import ToolCall from './ToolCall';

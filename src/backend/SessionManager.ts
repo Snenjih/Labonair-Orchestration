@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 import { forkSession as sdkForkSession } from '@anthropic-ai/claude-agent-sdk';
 import type { EffortLevel, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { ClaudeProcess, ImageBlock } from './ClaudeProcess';
-import { ParsedEvent, SessionStatus, AgentSettings, DEFAULT_AGENT_SETTINGS, McpServerEntry } from './shared/types';
+import { ParsedEvent, SessionStatus, AgentSettings, DEFAULT_AGENT_SETTINGS, McpServerEntry } from '../shared/types';
 import { translateSdkMessage } from './parser/SdkEventTranslator';
 
 export interface SessionState {

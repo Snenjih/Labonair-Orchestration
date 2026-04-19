@@ -156,7 +156,7 @@ export class ClaudeProcess {
     await this.activeQuery.setModel(enabled ? 'claude-haiku-4-5-20251001' : this.model);
   }
 
-  async applyMcpServers(servers: import('./shared/types').McpServerEntry[]): Promise<void> {
+  async applyMcpServers(servers: import('../shared/types').McpServerEntry[]): Promise<void> {
     if (!this.activeQuery) { return; }
     const enabled = servers.filter(s => s.enabled);
     const mcpRecord: Record<string, import('@anthropic-ai/claude-agent-sdk').McpServerConfig> = {};
