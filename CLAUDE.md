@@ -173,9 +173,20 @@ tsc -p ./
 - ✅ Phase 6 — UI Polish: pill input with effort (low/medium/high/xhigh/max), centered chat layout, duplicate message fix
 - ✅ Phase 7 — Session Auto-Titles: first user message auto-generates tab + sidebar label via `_generateTitle()`; `onLabelChanged` event propagates to panel title and webview header in real-time
 - ✅ Phase 8 — Settings System: persistent `AgentSettings` (model, effort, permissionMode) stored in `globalState`; sidebar footer with GitHub username + gear button; inline settings panel with auto-save; new sessions use saved defaults; chat panel pre-populates model/effort from settings
+- ✅ Phase A1 — Interrupt Fix: `ClaudeProcess.interrupt()` now correctly `await`s `Query.interrupt()`; `SessionManager.interruptSession()` added
+- ✅ Phase A2 — Keyboard Shortcuts: `Cmd+Shift+A` (New Session), `Cmd+Shift+F` (Focus Session with Quick Pick)
+- ✅ Phase A3 — Fast Mode Toggle: ⚡ button in MessageInput, toggles to `claude-haiku-4-5-20251001` via `Query.setModel()`
+- ✅ Phase B1 — Session Fork: Fork button in chat header, `SessionManager.forkSession()` via SDK `forkSession()`
+- ✅ Phase B2 — Session Branching UI: Sidebar shows child sessions indented under parent with ↳ prefix
+- ✅ Phase B3 — Session Export/Import: Download-Icon in header (JSON export), `labonair.action.importSession` command
+- ✅ Phase C1 — Session Search: Search input in sidebar, real-time client-side filter
+- ✅ Phase C2 — Permission History / Always-Allow: Checkbox on PermissionCard → adds to `trustedTools`; TrustedTools chips in Settings
+- ✅ Phase D1 — Diff View: `ToolCall.tsx` renders colored diff for Edit/Write/str_replace_editor tools
+- ✅ Phase D2 — MCP Server Config: Add/remove/toggle MCP servers in Settings → `Query.setMcpServers()`
+- ✅ Phase D3 — Hooks System: `hook_event` ParsedEvent, `enabledHooks` in AgentSettings, Hooks toggles in Settings, `HookEventBadge` in chat
 
 **Effort:** `EffortLevel` ('low'|'medium'|'high'|'xhigh'|'max') passed via query options in ClaudeProcess.ts.
 
 **AgentSettings storage key:** `labonair.settings` in `context.globalState`. Defaults: `{ defaultModel: 'claude-sonnet-4-6', defaultEffort: 'medium', permissionMode: 'default' }`.
 
-**Next:** End-to-end testing in Extension Development Host. Potential Phase 9: AI-generated session titles (SDK call on first turn), MCP server config UI, session resume/fork.
+**Next:** End-to-end testing in Extension Development Host (F5 → press Cmd+Shift+A to create session, test Fork/Export/Import, check MCP settings, verify Trusted Tools, test interrupt). All features below are now implemented.

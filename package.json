@@ -17,7 +17,7 @@
         {
           "id": "labonair-ai-container",
           "title": "Sessions",
-          "icon": "$(hub)"
+          "icon": "resources/ghost.svg"
         }
       ]
     },
@@ -57,6 +57,22 @@
       {
         "command": "labonair.action.clearApiKey",
         "title": "Labonair: Clear API Key"
+      },
+      {
+        "command": "labonair.action.importSession",
+        "title": "Labonair: Import Session"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "labonair.action.newAgentSession",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      },
+      {
+        "command": "labonair.action.focusSession",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f"
       }
     ],
     "menus": {
