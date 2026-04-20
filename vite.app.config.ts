@@ -14,8 +14,15 @@ export default defineConfig({
     outDir: '../../../dist/mobile',
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'src/frontend/app/index.html'),
+        'service-worker': path.resolve(__dirname, 'src/frontend/app/service-worker.ts'),
+      },
       output: {
-        entryFileNames: 'assets/[name].js',
+        entryFileNames: (chunk) => {
+          if (chunk.name === 'service-worker') { return 'service-worker.js'; }
+          return 'assets/[name].js';
+        },
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name].[ext]',
       },

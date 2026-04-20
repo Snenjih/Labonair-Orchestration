@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SessionManager } from './SessionManager';
-import { AgentSettings, DEFAULT_AGENT_SETTINGS } from '../shared/types';
+import { AgentSettings, DEFAULT_AGENT_SETTINGS, BridgeSettings } from '../shared/types';
+import type { BridgeServer } from './server/BridgeServer';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'labonair.views.agentSessions';
@@ -10,6 +11,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private readonly extensionUri: vscode.Uri,
     private readonly sessionManager: SessionManager,
     private readonly context: vscode.ExtensionContext,
+    private readonly bridgeServer?: BridgeServer,
   ) {
     sessionManager.onDidChangeSessions(() => this._refresh());
   }
@@ -32,6 +34,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     // Send current settings
     const settings = this.context.globalState.get<AgentSettings>('labonair.settings', { ...DEFAULT_AGENT_SETTINGS });
     webviewView.webview.postMessage({ type: 'settings', payload: settings });
+
+    // Send bridge state
+    this._sendBridgeState();
   }
 
   private async _getGitHubUsername(): Promise<string> {
@@ -54,7 +59,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._view.webview.postMessage({ type: 'sessions', payload: sessions });
   }
 
-  private async _handleMessage(msg: { type: string; sessionId?: string; label?: string; settings?: AgentSettings; payload?: unknown }): Promise<void> {
+  private async _handleMessage(msg: {
+    type: string;
+    sessionId?: string;
+    label?: string;
+    settings?: AgentSettings;
+    bridgeSettings?: BridgeSettings;
+    deviceId?: string;
+    readOnly?: boolean;
+    payload?: unknown;
+  }): Promise<void> {
     switch (msg.type) {
       case 'newSession':
         vscode.commands.executeCommand('labonair.action.newAgentSession');
@@ -81,6 +95,83 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           this._view?.webview.postMessage({ type: 'settings', payload: msg.settings });
         }
         break;
+
+      // ── Bridge messages ──
+      case 'getBridgeState':
+        await this._sendBridgeState();
+        break;
+
+      case 'saveBridgeSettings':
+        if (msg.bridgeSettings && this.bridgeServer) {
+          const allSettings = this.context.globalState.get<AgentSettings>(
+            'labonair.settings', { ...DEFAULT_AGENT_SETTINGS });
+          allSettings.bridge = msg.bridgeSettings;
+          await this.context.globalState.update('labonair.settings', allSettings);
+          this.sessionManager.updateSettings(allSettings);
+
+          const wasRunning = this.bridgeServer.isRunning;
+          const shouldRun = msg.bridgeSettings.enabled;
+
+          if (shouldRun && !wasRunning) {
+            await this.bridgeServer.start();
+            const qr = await this.bridgeServer.getQrData();
+            this._view?.webview.postMessage({ type: 'bridgeQr', payload: qr });
+          } else if (!shouldRun && wasRunning) {
+            await this.bridgeServer.stop();
+          } else if (shouldRun) {
+            await this.bridgeServer.updateSettings(msg.bridgeSettings);
+          }
+
+          await this._sendBridgeState();
+        }
+        break;
+
+      case 'getBridgeQr':
+        if (this.bridgeServer?.isRunning) {
+          const qr = await this.bridgeServer.getQrData();
+          this._view?.webview.postMessage({ type: 'bridgeQr', payload: qr });
+        }
+        break;
+
+      case 'rotateBridgeToken':
+        if (this.bridgeServer) {
+          await this.bridgeServer.rotateToken();
+          if (this.bridgeServer.isRunning) {
+            const qr = await this.bridgeServer.getQrData();
+            this._view?.webview.postMessage({ type: 'bridgeQr', payload: qr });
+          }
+          await this._sendBridgeState();
+        }
+        break;
+
+      case 'disconnectDevice':
+        if (msg.deviceId && this.bridgeServer) {
+          this.bridgeServer.disconnectDevice(msg.deviceId);
+          await this._sendBridgeState();
+        }
+        break;
+
+      case 'setDeviceReadOnly':
+        if (msg.deviceId !== undefined && msg.readOnly !== undefined && this.bridgeServer) {
+          this.bridgeServer.setDeviceReadOnly(msg.deviceId, msg.readOnly);
+          await this._sendBridgeState();
+        }
+        break;
+    }
+  }
+
+  private async _sendBridgeState(): Promise<void> {
+    if (!this._view || !this.bridgeServer) { return; }
+    const state = this.bridgeServer.getState();
+    const allSettings = this.context.globalState.get<AgentSettings>(
+      'labonair.settings', { ...DEFAULT_AGENT_SETTINGS });
+    this._view.webview.postMessage({
+      type: 'bridgeState',
+      payload: { ...state, bridgeSettings: allSettings.bridge ?? DEFAULT_AGENT_SETTINGS.bridge },
+    });
+    if (state.isRunning) {
+      const qr = await this.bridgeServer.getQrData();
+      this._view.webview.postMessage({ type: 'bridgeQr', payload: qr });
     }
   }
 
@@ -748,6 +839,187 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       opacity: 0.45;
       margin-top: 2px;
     }
+
+    /* ── Settings tabs ── */
+    .settings-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 6px 10px 0;
+      border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+      flex-shrink: 0;
+    }
+    .settings-tab {
+      padding: 5px 10px;
+      border: none;
+      border-radius: 6px 6px 0 0;
+      background: transparent;
+      color: var(--vscode-foreground);
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      opacity: 0.45;
+      transition: opacity 0.12s, background 0.12s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .settings-tab:hover { opacity: 0.75; }
+    .settings-tab.active {
+      opacity: 1;
+      border-bottom-color: var(--vscode-button-background, #0e639c);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; flex-direction: column; gap: 22px; }
+
+    /* ── Bridge section ── */
+    .bridge-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .bridge-status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: #f14c4c;
+    }
+    .bridge-status-dot.on { background: #4ec9b0; animation: pulse 2s ease-in-out infinite; }
+    .bridge-status-text { font-size: 12px; flex: 1; }
+    .bridge-toggle-btn {
+      padding: 4px 12px;
+      border: 1px solid var(--vscode-button-background, #0e639c);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-button-background, #0e639c);
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .bridge-toggle-btn:hover {
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #fff);
+    }
+    .bridge-toggle-btn.active {
+      background: rgba(241,76,76,0.15);
+      border-color: #f14c4c;
+      color: #f14c4c;
+    }
+    .bridge-toggle-btn.active:hover { background: rgba(241,76,76,0.3); }
+
+    .bridge-qr-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+      border-radius: 10px;
+    }
+    .bridge-qr-svg { border-radius: 6px; overflow: hidden; }
+    .bridge-qr-url {
+      font-size: 10px;
+      font-family: var(--vscode-editor-font-family, monospace);
+      opacity: 0.5;
+      text-align: center;
+      word-break: break-all;
+      max-width: 100%;
+    }
+    .bridge-qr-actions { display: flex; gap: 6px; }
+    .bridge-qr-btn {
+      flex: 1;
+      padding: 5px 8px;
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-foreground);
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.12s, background 0.12s;
+    }
+    .bridge-qr-btn:hover { opacity: 1; background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.06)); }
+    .bridge-qr-btn.danger:hover { color: #f14c4c; border-color: #f14c4c; }
+
+    .bridge-offline-hint {
+      text-align: center;
+      font-size: 11px;
+      opacity: 0.4;
+      line-height: 1.5;
+      padding: 8px 0;
+    }
+
+    .device-list { display: flex; flex-direction: column; gap: 6px; }
+    .device-item {
+      padding: 8px 10px;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+      border-radius: 8px;
+      font-size: 11px;
+    }
+    .device-item__row1 {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .device-item__name { font-weight: 600; flex: 1; }
+    .device-item__meta {
+      font-size: 10px;
+      opacity: 0.45;
+      margin-bottom: 5px;
+    }
+    .device-item__actions { display: flex; gap: 5px; }
+    .device-action-btn {
+      padding: 3px 8px;
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.15));
+      border-radius: 5px;
+      background: transparent;
+      color: var(--vscode-foreground);
+      font-size: 10px;
+      font-family: inherit;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.12s, color 0.12s, background 0.12s;
+    }
+    .device-action-btn:hover { opacity: 1; background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.06)); }
+    .device-action-btn.danger:hover { color: #f14c4c; border-color: #f14c4c; }
+    .device-action-btn.readonly-on {
+      background: rgba(14,99,156,0.2);
+      border-color: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-background, #0e639c);
+      opacity: 1;
+    }
+    .no-devices { font-size: 11px; opacity: 0.4; text-align: center; padding: 6px 0; }
+
+    .bridge-number-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bridge-number-field input {
+      width: 70px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+    }
+    .bridge-number-field input:focus { border-color: var(--vscode-focusBorder, #007acc); }
+    .bridge-number-field span { font-size: 11px; opacity: 0.5; }
+
+    .bridge-info-tip {
+      font-size: 10.5px;
+      opacity: 0.45;
+      padding: 6px 8px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+      border-left: 2px solid var(--vscode-focusBorder, #007acc);
+      line-height: 1.45;
+    }
   </style>
 </head>
 <body>
@@ -801,7 +1073,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       </div>
     </div>
 
+    <!-- Settings tabs -->
+    <div class="settings-tabs">
+      <button class="settings-tab active" id="tabGeneral">General</button>
+      <button class="settings-tab" id="tabBridge">Bridge</button>
+    </div>
+
     <div class="settings-body">
+
+      <!-- ══ GENERAL TAB ══ -->
+      <div class="tab-content active" id="tabContentGeneral">
 
       <!-- Model & Performance -->
       <div class="settings-section">
@@ -940,6 +1221,131 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         </div>
       </div>
 
+      </div><!-- end tabContentGeneral -->
+
+      <!-- ══ BRIDGE TAB ══ -->
+      <div class="tab-content" id="tabContentBridge">
+
+        <!-- Status & Enable -->
+        <div class="settings-section">
+          <div class="settings-section__header">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>
+            </svg>
+            Labonair Bridge
+          </div>
+          <div class="bridge-status-row">
+            <span class="bridge-status-dot" id="bridgeDot"></span>
+            <span class="bridge-status-text" id="bridgeStatusText">Disabled</span>
+            <button class="bridge-toggle-btn" id="bridgeToggleBtn">Enable</button>
+          </div>
+        </div>
+
+        <!-- QR Pairing (only when running) -->
+        <div class="settings-section" id="bridgePairingSection" style="display:none">
+          <div class="settings-section__header">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="17" width="4" height="4"/>
+            </svg>
+            Pair a Device
+          </div>
+          <div class="bridge-qr-wrap">
+            <div class="bridge-qr-svg" id="bridgeQrSvg">
+              <div style="width:180px;height:180px;background:rgba(255,255,255,0.04);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;opacity:0.4">Loading…</div>
+            </div>
+            <div class="bridge-qr-url" id="bridgeQrUrl"></div>
+            <div class="bridge-qr-actions">
+              <button class="bridge-qr-btn" id="bridgeCopyBtn">Copy URL</button>
+              <button class="bridge-qr-btn danger" id="bridgeRotateBtn">Rotate Token</button>
+            </div>
+          </div>
+          <div class="bridge-info-tip">
+            Scan this QR code with your phone's camera to open the companion app. For remote access outside your local network, use <strong>Tailscale</strong>.
+          </div>
+        </div>
+
+        <!-- Connected Devices -->
+        <div class="settings-section" id="bridgeDevicesSection" style="display:none">
+          <div class="settings-section__header">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            Connected Devices (<span id="bridgeDeviceCount">0</span>)
+          </div>
+          <div class="device-list" id="bridgeDeviceList">
+            <p class="no-devices">No devices connected</p>
+          </div>
+        </div>
+
+        <!-- Security Settings -->
+        <div class="settings-section" id="bridgeSecuritySection" style="display:none">
+          <div class="settings-section__header">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Security Settings
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field__label">Port</div>
+            <div class="settings-field__hint">Restart required if changed while active</div>
+            <div class="bridge-number-field">
+              <input type="number" id="bridgePort" min="1024" max="65535" value="8765" />
+              <span>default: 8765</span>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field__label">Max Connections</div>
+            <div class="bridge-number-field">
+              <input type="number" id="bridgeMaxConn" min="1" max="20" value="5" />
+              <span>devices</span>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field__label">Inactivity Timeout</div>
+            <div class="bridge-number-field">
+              <input type="number" id="bridgeTimeout" min="0" max="1440" value="30" />
+              <span>minutes (0 = never)</span>
+            </div>
+          </div>
+
+          <div class="hook-item">
+            <div class="hook-item__label">
+              Require Re-Auth on Reconnect
+              <div class="hook-item__hint">Force QR re-scan after disconnect</div>
+            </div>
+            <button class="mcp-toggle" id="bridgeReAuthToggle" data-field="requireReAuthOnReconnect" title="Toggle" aria-pressed="false"></button>
+          </div>
+
+          <div class="hook-item">
+            <div class="hook-item__label">
+              Read-Only Mode (all devices)
+              <div class="hook-item__hint">Devices can view but not send messages</div>
+            </div>
+            <button class="mcp-toggle" id="bridgeReadOnlyToggle" data-field="readOnlyMode" title="Toggle" aria-pressed="false"></button>
+          </div>
+
+          <div class="hook-item">
+            <div class="hook-item__label">
+              Push Notifications
+              <div class="hook-item__hint">Notify devices when Claude needs permission</div>
+            </div>
+            <button class="mcp-toggle on" id="bridgePushToggle" data-field="pushNotificationsEnabled" title="Toggle" aria-pressed="true"></button>
+          </div>
+
+          <div class="hook-item">
+            <div class="hook-item__label">
+              Audit Log
+              <div class="hook-item__hint">Log connections and actions to output panel</div>
+            </div>
+            <button class="mcp-toggle" id="bridgeAuditToggle" data-field="auditLogEnabled" title="Toggle" aria-pressed="false"></button>
+          </div>
+        </div>
+
+      </div><!-- end tabContentBridge -->
+
     </div>
   </div>
 
@@ -956,7 +1362,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       trustedTools: [],
       mcpServers: [],
       enabledHooks: [],
+      bridge: null,
     };
+
+    // ── Bridge state ──
+    let bridgeState = {
+      isRunning: false, port: 8765, ip: '', devices: [],
+      bridgeSettings: {
+        enabled: false, port: 8765, maxConnections: 5,
+        connectionTimeoutMinutes: 30, requireReAuthOnReconnect: false,
+        readOnlyMode: false, pushNotificationsEnabled: true,
+        auditLogEnabled: false, allowedDeviceIds: [],
+      }
+    };
+    let currentQrUrl = '';
+
+    // ── Tab switching ──
+    document.getElementById('tabGeneral').addEventListener('click', () => switchTab('general'));
+    document.getElementById('tabBridge').addEventListener('click', () => {
+      switchTab('bridge');
+      vscode.postMessage({ type: 'getBridgeState' });
+    });
+
+    function switchTab(tab) {
+      document.getElementById('tabGeneral').classList.toggle('active', tab === 'general');
+      document.getElementById('tabBridge').classList.toggle('active', tab === 'bridge');
+      document.getElementById('tabContentGeneral').classList.toggle('active', tab === 'general');
+      document.getElementById('tabContentBridge').classList.toggle('active', tab === 'bridge');
+    }
 
     // ── View toggle ──
     const sessionsView = document.getElementById('sessions-view');
@@ -971,12 +1404,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       renderTrustedTools();
       renderMcpList();
       renderHookList();
+      vscode.postMessage({ type: 'getBridgeState' });
     });
 
     backBtn.addEventListener('click', () => {
       settingsView.classList.remove('visible');
       sessionsView.style.display = 'flex';
       settingsBtn.classList.remove('active');
+      switchTab('general');
     });
 
     // ── Incoming messages ──
@@ -995,7 +1430,155 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         renderTrustedTools();
         renderMcpList();
         renderHookList();
+      } else if (msg.type === 'bridgeState') {
+        bridgeState = { ...bridgeState, ...msg.payload };
+        renderBridgeTab();
+      } else if (msg.type === 'bridgeQr') {
+        currentQrUrl = msg.payload.url || '';
+        document.getElementById('bridgeQrSvg').innerHTML = msg.payload.svg || '';
+        document.getElementById('bridgeQrUrl').textContent = currentQrUrl;
       }
+    });
+
+    // ── Bridge UI ──
+    function renderBridgeTab() {
+      const settings = bridgeState.bridgeSettings || {};
+      const running = bridgeState.isRunning;
+
+      // Status row
+      const dot = document.getElementById('bridgeDot');
+      dot.className = 'bridge-status-dot' + (running ? ' on' : '');
+      document.getElementById('bridgeStatusText').textContent = running
+        ? 'Active on port ' + bridgeState.port
+        : 'Disabled';
+      const btn = document.getElementById('bridgeToggleBtn');
+      btn.textContent = running ? 'Disable' : 'Enable';
+      btn.className = 'bridge-toggle-btn' + (running ? ' active' : '');
+
+      // Show/hide sections
+      const showWhenRunning = ['bridgePairingSection', 'bridgeDevicesSection', 'bridgeSecuritySection'];
+      showWhenRunning.forEach(id => {
+        document.getElementById(id).style.display = running ? '' : 'none';
+      });
+
+      // Devices
+      document.getElementById('bridgeDeviceCount').textContent = String((bridgeState.devices || []).length);
+      renderDeviceList();
+
+      // Security toggles
+      applyBridgeToggle('bridgeReAuthToggle', settings.requireReAuthOnReconnect);
+      applyBridgeToggle('bridgeReadOnlyToggle', settings.readOnlyMode);
+      applyBridgeToggle('bridgePushToggle', settings.pushNotificationsEnabled);
+      applyBridgeToggle('bridgeAuditToggle', settings.auditLogEnabled);
+
+      // Number inputs (only set if not focused)
+      setInputIfUnfocused('bridgePort', settings.port);
+      setInputIfUnfocused('bridgeMaxConn', settings.maxConnections);
+      setInputIfUnfocused('bridgeTimeout', settings.connectionTimeoutMinutes);
+    }
+
+    function applyBridgeToggle(id, value) {
+      const btn = document.getElementById(id);
+      if (!btn) { return; }
+      btn.className = 'mcp-toggle' + (value ? ' on' : '');
+      btn.setAttribute('aria-pressed', String(!!value));
+    }
+
+    function setInputIfUnfocused(id, value) {
+      const el = document.getElementById(id);
+      if (el && document.activeElement !== el) { el.value = value != null ? String(value) : ''; }
+    }
+
+    function renderDeviceList() {
+      const el = document.getElementById('bridgeDeviceList');
+      if (!el) { return; }
+      const devices = bridgeState.devices || [];
+      if (devices.length === 0) {
+        el.innerHTML = '<p class="no-devices">No devices connected</p>';
+        return;
+      }
+      el.innerHTML = devices.map(d => {
+        const connAgo = Math.round((Date.now() - d.connectedAt) / 60000);
+        const activeAgo = Math.round((Date.now() - d.lastActivity) / 60000);
+        return \`<div class="device-item" data-id="\${escHtml(d.id)}">
+          <div class="device-item__row1">
+            <span class="device-item__name">\${escHtml(d.name)}</span>
+            \${d.isReadOnly ? '<span style="font-size:9px;padding:2px 5px;background:rgba(255,193,7,0.15);border:1px solid rgba(255,193,7,0.4);border-radius:4px;color:#ffc107">read-only</span>' : ''}
+          </div>
+          <div class="device-item__meta">\${escHtml(d.ip)} · Connected \${connAgo}m ago · Active \${activeAgo}m ago</div>
+          <div class="device-item__actions">
+            <button class="device-action-btn \${d.isReadOnly ? 'readonly-on' : ''}" data-action="toggleReadOnly" data-id="\${escHtml(d.id)}" data-readonly="\${d.isReadOnly}">\${d.isReadOnly ? 'Make Writable' : 'Read-Only'}</button>
+            <button class="device-action-btn danger" data-action="disconnect" data-id="\${escHtml(d.id)}">Disconnect</button>
+          </div>
+        </div>\`;
+      }).join('');
+
+      el.querySelectorAll('[data-action="disconnect"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          vscode.postMessage({ type: 'disconnectDevice', deviceId: btn.dataset.id });
+        });
+      });
+      el.querySelectorAll('[data-action="toggleReadOnly"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const isReadOnly = btn.dataset.readonly === 'true';
+          vscode.postMessage({ type: 'setDeviceReadOnly', deviceId: btn.dataset.id, readOnly: !isReadOnly });
+        });
+      });
+    }
+
+    function saveBridgeSettings() {
+      const settings = bridgeState.bridgeSettings || {};
+      vscode.postMessage({ type: 'saveBridgeSettings', bridgeSettings: { ...settings } });
+    }
+
+    // Bridge toggle button
+    document.getElementById('bridgeToggleBtn').addEventListener('click', () => {
+      const settings = bridgeState.bridgeSettings || {};
+      settings.enabled = !bridgeState.isRunning;
+      bridgeState.bridgeSettings = settings;
+      vscode.postMessage({ type: 'saveBridgeSettings', bridgeSettings: { ...settings } });
+    });
+
+    // QR actions
+    document.getElementById('bridgeCopyBtn').addEventListener('click', () => {
+      if (currentQrUrl) { navigator.clipboard.writeText(currentQrUrl).catch(() => {}); }
+    });
+    document.getElementById('bridgeRotateBtn').addEventListener('click', () => {
+      if (confirm('Rotate the token? All connected devices will be disconnected and a new QR code will be generated.')) {
+        vscode.postMessage({ type: 'rotateBridgeToken' });
+      }
+    });
+
+    // Security toggles
+    ['bridgeReAuthToggle', 'bridgeReadOnlyToggle', 'bridgePushToggle', 'bridgeAuditToggle'].forEach(id => {
+      document.getElementById(id).addEventListener('click', () => {
+        const field = document.getElementById(id).dataset.field;
+        const settings = bridgeState.bridgeSettings || {};
+        settings[field] = !settings[field];
+        bridgeState.bridgeSettings = settings;
+        applyBridgeToggle(id, settings[field]);
+        saveBridgeSettings();
+      });
+    });
+
+    // Number inputs (debounced save)
+    let bridgeInputTimer = null;
+    function onBridgeNumberInput() {
+      clearTimeout(bridgeInputTimer);
+      bridgeInputTimer = setTimeout(() => {
+        const settings = bridgeState.bridgeSettings || {};
+        const port = parseInt(document.getElementById('bridgePort').value);
+        const maxConn = parseInt(document.getElementById('bridgeMaxConn').value);
+        const timeout = parseInt(document.getElementById('bridgeTimeout').value);
+        if (!isNaN(port) && port >= 1024) { settings.port = port; }
+        if (!isNaN(maxConn) && maxConn >= 1) { settings.maxConnections = maxConn; }
+        if (!isNaN(timeout) && timeout >= 0) { settings.connectionTimeoutMinutes = timeout; }
+        bridgeState.bridgeSettings = settings;
+        saveBridgeSettings();
+      }, 800);
+    }
+    ['bridgePort', 'bridgeMaxConn', 'bridgeTimeout'].forEach(id => {
+      document.getElementById(id).addEventListener('input', onBridgeNumberInput);
     });
 
     // ── Settings UI ──

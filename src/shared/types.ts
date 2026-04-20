@@ -19,6 +19,40 @@ export interface McpServerEntry {
   enabled: boolean;
 }
 
+export interface BridgeSettings {
+  enabled: boolean;
+  port: number;
+  maxConnections: number;
+  connectionTimeoutMinutes: number;
+  requireReAuthOnReconnect: boolean;
+  readOnlyMode: boolean;
+  pushNotificationsEnabled: boolean;
+  auditLogEnabled: boolean;
+  allowedDeviceIds: string[];
+}
+
+export interface ConnectedDevice {
+  id: string;
+  name: string;
+  connectedAt: number;
+  lastActivity: number;
+  ip: string;
+  isReadOnly: boolean;
+  pushSubscription?: string;
+}
+
+export const DEFAULT_BRIDGE_SETTINGS: BridgeSettings = {
+  enabled: false,
+  port: 8765,
+  maxConnections: 5,
+  connectionTimeoutMinutes: 30,
+  requireReAuthOnReconnect: false,
+  readOnlyMode: false,
+  pushNotificationsEnabled: true,
+  auditLogEnabled: false,
+  allowedDeviceIds: [],
+};
+
 export interface AgentSettings {
   defaultModel: string;
   defaultEffort: string;
@@ -26,6 +60,7 @@ export interface AgentSettings {
   trustedTools: string[];
   mcpServers: McpServerEntry[];
   enabledHooks: string[];
+  bridge: BridgeSettings;
 }
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
@@ -35,4 +70,5 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   trustedTools: [],
   mcpServers: [],
   enabledHooks: [],
+  bridge: { ...DEFAULT_BRIDGE_SETTINGS },
 };

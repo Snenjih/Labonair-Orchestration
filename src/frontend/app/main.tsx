@@ -7,3 +7,10 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>
 );
+
+// Register Service Worker for Web Push notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .register('/service-worker.js', { scope: '/' })
+    .catch(() => { /* SW registration is optional */ });
+}

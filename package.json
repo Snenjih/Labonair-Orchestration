@@ -13,13 +13,18 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
     "lucide-react": "^0.460.0",
     "prismjs": "^1.29.0",
+    "qrcode-svg": "^1.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
-    "tailwind-merge": "^2.5.4"
+    "tailwind-merge": "^2.5.4",
+    "web-push": "^3.6.7",
+    "ws": "^8.18.0"
   },
   "contributes": {
     "viewsContainers": {
@@ -115,11 +120,15 @@
     "typecheck:frontend": "tsc -p tsconfig.frontend.json"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/node": "^25.6.0",
     "@types/prismjs": "^1.26.4",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/vscode": "^1.90.0",
+    "@types/web-push": "^3.6.3",
+    "@types/ws": "^8.5.12",
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^6.0.2",
     "vite": "^5.4.10"

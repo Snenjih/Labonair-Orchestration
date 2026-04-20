@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { SessionManager } from './SessionManager';
 import { SidebarProvider } from './SidebarProvider';
 import { ChatPanelProvider } from './ChatPanelProvider';
+import { BridgeServer } from './server/BridgeServer';
+import { DEFAULT_AGENT_SETTINGS } from '../shared/types';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const sessionManager = new SessionManager();
@@ -27,7 +29,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   sessionManager.isPanelVisible = (id) =>
     ChatPanelProvider.currentPanels.get(id)?.isVisible ?? false;
 
-  const sidebarProvider = new SidebarProvider(context.extensionUri, sessionManager, context);
+  // Initialise Bridge server; start it if previously enabled
+  const savedSettings = context.globalState.get(
+    'labonair.settings',
+    { ...DEFAULT_AGENT_SETTINGS },
+  );
+  const bridgeSettings = savedSettings.bridge ?? { ...DEFAULT_AGENT_SETTINGS.bridge };
+  const bridgeServer = new BridgeServer(context, sessionManager, bridgeSettings);
+  context.subscriptions.push({ dispose: () => bridgeServer.dispose() });
+
+  if (bridgeSettings.enabled) {
+    bridgeServer.start().catch(() => {});
+  }
+
+  const sidebarProvider = new SidebarProvider(context.extensionUri, sessionManager, context, bridgeServer);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebarProvider),
@@ -113,7 +128,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } catch (e) {
         vscode.window.showErrorMessage(`Labonair: Failed to import session — ${e}`);
       }
-    })
+    }),
+
+    vscode.commands.registerCommand('labonair.bridge.rotateToken', async () => {
+      await bridgeServer.rotateToken();
+      vscode.window.showInformationMessage('Labonair Bridge: Token rotated. Re-scan QR to reconnect devices.');
+    }),
   );
 }
 

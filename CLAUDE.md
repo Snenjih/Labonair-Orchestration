@@ -211,9 +211,21 @@ tsc -p ./
 - ✅ Phase D2 — MCP Server Config: Add/remove/toggle MCP servers in Settings → `Query.setMcpServers()`
 - ✅ Phase D3 — Hooks System: `hook_event` ParsedEvent, `enabledHooks` in AgentSettings, Hooks toggles in Settings, `HookEventBadge` in chat
 - ✅ Phase E0 — Repo Refactor: Unified src/ structure (`src/backend/`, `src/frontend/desktop/`, `src/frontend/app/`, `src/shared/`); single package.json; `@shared` Vite alias eliminates manual type mirroring; `vite.desktop.config.ts` + `vite.app.config.ts`
+- ✅ Phase E1 — Labonair Bridge: Mobile companion PWA with local HTTP/WS server, token auth (OS Keychain), QR code pairing, device registry, rate limiting, Web Push (VAPID), read-only mode per device, inactivity timeout, audit log; "Bridge" tab in Settings sidebar
+
+**Labonair Bridge architecture:**
+- `src/backend/server/BridgeServer.ts` — HTTP+WS server; Express static + WS auth + SessionManager bridge
+- `src/backend/server/DeviceRegistry.ts` — device tracking + push subscription persistence
+- `src/backend/server/RateLimiter.ts` — sliding window 30 req/min per device
+- `src/backend/server/PushManager.ts` — VAPID key init + Web Push send
+- `src/frontend/app/` — PWA mobile React app: WebSocketClient, MobileHome, MobileChat, MobilePermissionCard, MobileToolCall, MobileMessageInput, service-worker.ts
+- Secrets: `labonair.bridge.token` (auth token) · `labonair.bridge.vapid` (VAPID keys) · globalState: `labonair.bridge.devices`
+- `BridgeSettings` field added to `AgentSettings`; default: `enabled: false`
+- Settings sidebar now has **General** + **Bridge** tabs; Bridge tab shows QR, device list, security settings
+- New deps: `express`, `ws`, `cors`, `web-push`, `qrcode-svg`
 
 **Effort:** `EffortLevel` ('low'|'medium'|'high'|'xhigh'|'max') passed via query options in ClaudeProcess.ts.
 
-**AgentSettings storage key:** `labonair.settings` in `context.globalState`. Defaults: `{ defaultModel: 'claude-sonnet-4-6', defaultEffort: 'medium', permissionMode: 'default' }`.
+**AgentSettings storage key:** `labonair.settings` in `context.globalState`. Now includes `bridge: BridgeSettings`.
 
-**Next:** End-to-end testing in Extension Development Host (F5 → press Cmd+Shift+A to create session, test Fork/Export/Import, check MCP settings, verify Trusted Tools, test interrupt). All features below are now implemented.
+**Next:** F5 → Settings gear → Bridge tab → Enable Bridge → scan QR on phone → verify session list → test chat + permission from mobile. Verify token rotation disconnects all devices.
