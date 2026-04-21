@@ -152,6 +152,23 @@ export class ChatPanelProvider {
           break;
         }
 
+        case 'respondToQuestion': {
+          const { requestId, answer } = message as { requestId: string; answer: string };
+          this.sessionManager.respondToQuestion(this.sessionId, requestId, answer);
+          break;
+        }
+
+        case 'openFile': {
+          const { path } = message.payload as { path: string };
+          try {
+            const uri = vscode.Uri.file(path);
+            await vscode.window.showTextDocument(uri, { preserveFocus: false });
+          } catch {
+            vscode.window.showErrorMessage(`Labonair: Cannot open file — ${path}`);
+          }
+          break;
+        }
+
         case 'clearHistory': {
           const s = this.sessionManager.getSessionState(this.sessionId);
           if (s) { s.history = []; this.sessionManager['_persist'](); }

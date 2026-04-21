@@ -3,7 +3,6 @@ import { ParsedEvent } from '@shared/types';
 import { UserMessage, AssistantMessage } from './Message';
 import ThoughtItem from './ThoughtItem';
 import ToolCall from './ToolCall';
-import PermissionRequestCard from './PermissionRequestCard';
 import HookEventBadge from './HookEventBadge';
 
 interface ToolCallGroup {
@@ -91,16 +90,11 @@ export default function AgentStreamView({ history, dismissedPermissions, onPermi
           case 'thought':
             return <ThoughtItem key={key} status={event.status} text={event.text} />;
           case 'permission_request':
-            if (dismissedPermissions.has(key)) { return null; }
-            return (
-              <PermissionRequestCard
-                key={key}
-                action={event.action}
-                context={event.context}
-                requestId={event.requestId}
-                onRespond={(allowed) => onPermissionRespond(key, allowed)}
-              />
-            );
+            // Rendered as floating overlay in App.tsx — skip inline
+            return null;
+          case 'ask_user_question':
+            // Rendered as floating overlay in App.tsx — skip inline
+            return null;
           case 'hook_event':
             return <HookEventBadge key={key} hookType={event.hookType} message={event.message} />;
           default:

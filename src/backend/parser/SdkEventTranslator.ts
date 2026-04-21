@@ -28,6 +28,8 @@ export function translateSdkMessage(message: SDKMessage): ParsedEvent[] {
         events.push({ type: 'thought', status: 'ready', text: block.thinking });
       }
       if (block.type === 'tool_use') {
+        // AskUserQuestion is handled via canUseTool callback — skip tool_call events for it
+        if (block.name === 'AskUserQuestion') { continue; }
         events.push({
           type: 'tool_call_start',
           toolName: block.name,

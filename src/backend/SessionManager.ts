@@ -256,6 +256,20 @@ export class SessionManager {
       this._maybeNotify(id, state);
     });
 
+    claudeProcess.onQuestionRequest(({ requestId, question, options }) => {
+      const event: ParsedEvent = {
+        type: 'ask_user_question',
+        question,
+        options,
+        requestId,
+      };
+      state.history.push(event);
+      this._onParsedEvent.fire({ id, event });
+      state.status = 'permission_required';
+      this._onDidChangeSessions.fire();
+      this._maybeNotify(id, state);
+    });
+
     claudeProcess.onRawOutput((data) => {
       this._onRawOutput.fire({ id, data });
     });
@@ -306,6 +320,10 @@ export class SessionManager {
 
   respondToPermission(sessionId: string, requestId: string, allowed: boolean): void {
     this.sessions.get(sessionId)?.process.respondToPermission(requestId, allowed);
+  }
+
+  respondToQuestion(sessionId: string, requestId: string, answer: string): void {
+    this.sessions.get(sessionId)?.process.respondToQuestion(requestId, answer);
   }
 
   async interruptSession(sessionId: string): Promise<void> {

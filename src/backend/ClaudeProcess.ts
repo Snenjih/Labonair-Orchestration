@@ -61,12 +61,16 @@ export class ClaudeProcess {
   private activeQuery: Query | null = null;
   private inputStream: AsyncInput<SDKUserMessage> | null = null;
   private pendingPermissions = new Map<string, (result: PermissionResult) => void>();
+  private pendingQuestions = new Map<string, (answer: string) => void>();
 
   private _onRawOutput = new vscode.EventEmitter<string>();
   public readonly onRawOutput = this._onRawOutput.event;
 
   private _onPermissionRequest = new vscode.EventEmitter<{ requestId: string; toolName: string; input: unknown }>();
   public readonly onPermissionRequest = this._onPermissionRequest.event;
+
+  private _onQuestionRequest = new vscode.EventEmitter<{ requestId: string; question: string; options: string[] }>();
+  public readonly onQuestionRequest = this._onQuestionRequest.event;
 
   private _onHookEvent = new vscode.EventEmitter<{ hookType: string; message: string }>();
   public readonly onHookEvent = this._onHookEvent.event;
@@ -95,6 +99,21 @@ export class ClaudeProcess {
         ...(this.effort ? { effort: this.effort } : {}),
         ...(this.apiKey ? { env: { ANTHROPIC_API_KEY: this.apiKey } } : {}),
         canUseTool: async (toolName: string, input: unknown) => {
+          // AskUserQuestion: pause and ask the user, inject their answer back
+          if (toolName === 'AskUserQuestion') {
+            const inp = (input ?? {}) as Record<string, unknown>;
+            const question = String(inp.question ?? inp.prompt ?? '');
+            const rawOptions = inp.options ?? inp.choices ?? [];
+            const options: string[] = Array.isArray(rawOptions)
+              ? rawOptions.map(String)
+              : [];
+            const requestId = `q-${crypto.randomUUID()}`;
+            const answer = await new Promise<string>(resolve => {
+              this.pendingQuestions.set(requestId, resolve);
+              this._onQuestionRequest.fire({ requestId, question, options });
+            });
+            return { behavior: 'allow', updatedInput: { ...inp, answer }, updatedPermissions: [] };
+          }
           if (this.trustedTools.includes(toolName)) {
             return { behavior: 'allow', updatedInput: {}, updatedPermissions: [] };
           }
@@ -145,6 +164,13 @@ export class ClaudeProcess {
     );
   }
 
+  respondToQuestion(requestId: string, answer: string): void {
+    const resolve = this.pendingQuestions.get(requestId);
+    if (!resolve) { return; }
+    this.pendingQuestions.delete(requestId);
+    resolve(answer);
+  }
+
   setModel(model: string): void { this.model = model; }
   setEffort(effort: EffortLevel): void { this.effort = effort; }
   setApiKey(key: string): void { this.apiKey = key; }
@@ -184,6 +210,7 @@ export class ClaudeProcess {
     this.inputStream = null;
     this._onRawOutput.dispose();
     this._onPermissionRequest.dispose();
+    this._onQuestionRequest.dispose();
     this._onHookEvent.dispose();
   }
 }

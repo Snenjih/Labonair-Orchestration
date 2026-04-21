@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
+import clsx from 'clsx';
 import { vscode } from '../utils/vscode';
 
 interface Props {
@@ -7,9 +8,10 @@ interface Props {
   context: string;
   requestId: string;
   onRespond: (allowed: boolean) => void;
+  variant?: 'inline' | 'floating';
 }
 
-export default function PermissionRequestCard({ action, context, requestId, onRespond }: Props) {
+export default function PermissionRequestCard({ action, context, requestId, onRespond, variant = 'inline' }: Props) {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
 
   function respond(allowed: boolean) {
@@ -21,7 +23,7 @@ export default function PermissionRequestCard({ action, context, requestId, onRe
   }
 
   return (
-    <div className="perm-card" role="alert">
+    <div className={clsx('perm-card', variant === 'floating' && 'perm-card--floating')} role="alert">
       <div className="perm-card__header">
         <ShieldAlert size={18} />
         <span>Permission Required</span>
