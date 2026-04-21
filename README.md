@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="resources/ghost-color.svg" width="80" height="80" alt="Labonair">
-</p>
-
 # Labonair AI Core
 
 **Mission Control for Claude** — A built-in VS Code extension providing persistent, autonomous Claude agent sessions with full conversation history, permission-based tool execution, and native UI integration.
