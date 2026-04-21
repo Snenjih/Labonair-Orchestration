@@ -46,13 +46,18 @@ export function MobileMessageInput({ onSend, disabled, readOnly }: Props) {
   };
 
   // Voice input
+  interface SpeechRecognitionEvt { results: ArrayLike<ArrayLike<{ transcript: string }>>; }
+  interface SpeechRecognitionLike { lang: string; onresult: ((e: SpeechRecognitionEvt) => void) | null; start(): void; }
+  type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
   const startVoice = () => {
-    const SR = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    const SR: SpeechRecognitionCtor | undefined =
+      (window as unknown as { SpeechRecognition?: SpeechRecognitionCtor }).SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor }).webkitSpeechRecognition;
     if (!SR) { return; }
     const recognition = new SR();
     recognition.lang = navigator.language;
-    recognition.onresult = (e) => {
+    recognition.onresult = (e: SpeechRecognitionEvt) => {
       const transcript = e.results[0]?.[0]?.transcript ?? '';
       setText(prev => prev + transcript);
     };

@@ -14,5 +14,6 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src/frontend", "src/shared"]
+  "include": ["src/frontend", "src/shared"],
+  "exclude": ["src/frontend/app/service-worker.ts"]
 }
