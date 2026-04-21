@@ -20,17 +20,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: npm ci
-
-      - name: Install webview dependencies
-        run: cd webview-ui && npm ci
 
       - name: Build extension
         run: npm run compile
 
-      - name: Type check
+      - name: Type check backend
         run: npx tsc --noEmit
+
+      - name: Type check frontend
+        run: npm run typecheck:frontend
 
       - name: Verify VSIX packaging
         run: |
