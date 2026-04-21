@@ -53,6 +53,14 @@ body {
   flex-shrink: 0;
 }
 
+.app-header__left {
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+}
+
 .app-header__title {
   font-size: 11px;
   font-weight: 600;
@@ -854,31 +862,62 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Typing indicator ─────────────────────────────────────── */
+/* ── Orbit ring (header working indicator) ────────────────── */
 
-.typing-indicator {
+.orbit-ring {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(79, 193, 255, 0.2);
+  border-top-color: #4fc1ff;
+  animation: orbit-spin 0.75s linear infinite;
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Line stats ───────────────────────────────────────────── */
+
+.line-stats {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+}
+
+.line-stats__added  { color: #4ec9b0; }
+.line-stats__removed { color: #f14c4c; }
+
+/* ── Typing indicator (orbiting dots) ────────────────────── */
+
+.typing-indicator {
+  width: 26px;
+  height: 26px;
+  position: relative;
+  animation: orbit-spin 1.6s linear infinite;
+  margin: 4px 2px;
+  flex-shrink: 0;
 }
 
 .typing-indicator span {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--vscode-foreground);
-  opacity: 0.35;
-  animation: typing-bounce 1.2s ease-in-out infinite;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -2.5px;
 }
 
-.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
-  30% { transform: translateY(-5px); opacity: 0.85; }
-}
+.typing-indicator span:nth-child(1) { transform: translateY(-10px); opacity: 1; }
+.typing-indicator span:nth-child(2) { transform: rotate(120deg) translateY(-10px); opacity: 0.55; }
+.typing-indicator span:nth-child(3) { transform: rotate(240deg) translateY(-10px); opacity: 0.2; }
 
 /* ── Pill stop button ─────────────────────────────────────── */
 

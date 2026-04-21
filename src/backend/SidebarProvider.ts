@@ -305,14 +305,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       flex-shrink: 0;
     }
     .session__dot--idle     { background: var(--vscode-foreground); opacity: 0.25; }
-    .session__dot--working  { background: #4fc1ff; animation: pulse 1.2s ease-in-out infinite; }
+    .session__dot--working  { background: transparent; border: 2px solid rgba(79,193,255,0.25); border-top-color: #4fc1ff; animation: dot-spin 0.75s linear infinite; }
     .session__dot--permission_required { background: #ffc107; }
     .session__dot--finished { background: #4ec9b0; }
     .session__dot--error    { background: #f14c4c; }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.85); }
+    @keyframes dot-spin {
+      to { transform: rotate(360deg); }
     }
 
     .session__info { flex: 1; min-width: 0; }

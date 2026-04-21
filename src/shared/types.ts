@@ -7,7 +7,8 @@ export type ParsedEvent =
   | { type: 'tool_call_end'; status: 'completed' | 'failed' }
   | { type: 'permission_request'; action: string; context: string; requestId: string }
   | { type: 'session_finished'; inputTokens?: number }
-  | { type: 'hook_event'; hookType: string; message: string };
+  | { type: 'hook_event'; hookType: string; message: string }
+  | { type: 'stats_update'; linesAdded: number; linesRemoved: number };
 
 export type SessionStatus = 'idle' | 'working' | 'permission_required' | 'finished' | 'error';
 

@@ -23,12 +23,14 @@ export default function App() {
   const [slashCommands, setSlashCommands] = useState<{ name: string; description: string; argumentHint?: string; clientOnly?: boolean }[]>([]);
   const [contextTokens, setContextTokens] = useState(0);
   const [fastMode, setFastMode] = useState(false);
+  const [linesAdded, setLinesAdded] = useState(0);
+  const [linesRemoved, setLinesRemoved] = useState(0);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const message = event.data;
       switch (message.type) {
-        case 'initialState':
+        case 'initialState': {
           setSession({ sessionId: message.payload.sessionId, status: message.payload.status });
           setStatus(message.payload.status ?? 'idle');
           setHasApiKey(message.payload.hasApiKey ?? false);
@@ -36,15 +38,29 @@ export default function App() {
           if (message.payload.defaultModel) { setSelectedModel(message.payload.defaultModel); }
           if (message.payload.defaultEffort) { setSelectedEffort(message.payload.defaultEffort); }
           if (Array.isArray(message.payload.history)) {
-            setHistory(message.payload.history as ParsedEvent[]);
+            const hist = message.payload.history as ParsedEvent[];
+            setHistory(hist);
+            let added = 0, removed = 0;
+            for (const e of hist) {
+              if (e.type === 'stats_update') { added += e.linesAdded; removed += e.linesRemoved; }
+            }
+            setLinesAdded(added);
+            setLinesRemoved(removed);
           }
           break;
+        }
         case 'api_key_saved':
           setHasApiKey(true);
           break;
-        case 'parsed_event':
-          setHistory(h => [...h, message.payload as ParsedEvent]);
+        case 'parsed_event': {
+          const ev = message.payload as ParsedEvent;
+          setHistory(h => [...h, ev]);
+          if (ev.type === 'stats_update') {
+            setLinesAdded(n => n + ev.linesAdded);
+            setLinesRemoved(n => n + ev.linesRemoved);
+          }
           break;
+        }
         case 'status_update':
           setStatus(message.payload as string);
           break;
@@ -112,6 +128,8 @@ export default function App() {
   function handleClear() {
     setHistory([]);
     setContextTokens(0);
+    setLinesAdded(0);
+    setLinesRemoved(0);
     vscode.postMessage({ type: 'clearHistory' });
   }
 
@@ -124,10 +142,19 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
+        <div className="app-header__left">
+          {isWorking && <span className="orbit-ring" aria-hidden="true" />}
+        </div>
         <span className="app-header__title">
           {sessionLabel || (session ? `Session ${session.sessionId.slice(0, 6)}` : 'Loading…')}
         </span>
         <div className="app-header__actions">
+          {(linesAdded > 0 || linesRemoved > 0) && (
+            <span className="line-stats" title="Lines changed this session">
+              {linesAdded > 0 && <span className="line-stats__added">+{linesAdded}</span>}
+              {linesRemoved > 0 && <span className="line-stats__removed">-{linesRemoved}</span>}
+            </span>
+          )}
           <button className="app-header__btn" title="Export session" aria-label="Export session" onClick={handleExport}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>

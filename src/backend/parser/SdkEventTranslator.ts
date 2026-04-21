@@ -1,6 +1,21 @@
 import { type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { type ParsedEvent } from '../../shared/types';
 
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'str_replace_editor', 'str_replace_based_edit_tool']);
+
+function computeLineDelta(toolName: string, input: any): { linesAdded: number; linesRemoved: number } {
+  if (toolName === 'Write') {
+    const lines = String(input?.content ?? '').split('\n').length;
+    return { linesAdded: lines, linesRemoved: 0 };
+  }
+  const oldStr = String(input?.old_str ?? input?.old_string ?? '');
+  const newStr = String(input?.new_str ?? input?.new_string ?? input?.new_content ?? '');
+  return {
+    linesAdded: newStr ? newStr.split('\n').length : 0,
+    linesRemoved: oldStr ? oldStr.split('\n').length : 0,
+  };
+}
+
 export function translateSdkMessage(message: SDKMessage): ParsedEvent[] {
   const events: ParsedEvent[] = [];
 
@@ -18,6 +33,12 @@ export function translateSdkMessage(message: SDKMessage): ParsedEvent[] {
           toolName: block.name,
           args: JSON.stringify(block.input),
         });
+        if (EDIT_TOOLS.has(block.name)) {
+          const delta = computeLineDelta(block.name, block.input);
+          if (delta.linesAdded > 0 || delta.linesRemoved > 0) {
+            events.push({ type: 'stats_update', ...delta });
+          }
+        }
       }
     }
   }
