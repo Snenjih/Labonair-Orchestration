@@ -8,6 +8,8 @@ export class WebSocketClient {
   private reconnectDelay = 1000;
   private _isAuthenticated = false;
   private _isReadOnly = false;
+  private _permanentlyFailed = false;
+  private _stopped = false;
   private deviceId: string | null;
   private readonly wsUrl: string;
 
@@ -23,6 +25,7 @@ export class WebSocketClient {
   get isReadOnly(): boolean { return this._isReadOnly; }
 
   connect(): void {
+    if (this._stopped || this._permanentlyFailed) { return; }
     try {
       this.ws = new WebSocket(this.wsUrl);
       this.ws.onopen = () => this._onOpen();
@@ -50,6 +53,7 @@ export class WebSocketClient {
   }
 
   disconnect(): void {
+    this._stopped = true;
     this._clearPing();
     this.ws?.close(1000, 'User closed');
   }
@@ -64,6 +68,7 @@ export class WebSocketClient {
   private _onMessage(e: MessageEvent): void {
     try {
       const msg = JSON.parse(e.data as string) as WsMsg;
+
       if (msg.type === 'auth_success') {
         this._isAuthenticated = true;
         this._isReadOnly = msg.readOnly as boolean;
@@ -72,6 +77,12 @@ export class WebSocketClient {
         localStorage.setItem('labonair.bridge.deviceId', id);
         this._startPing();
       }
+
+      if (msg.type === 'auth_failed') {
+        // Don't reconnect on permanent auth failure (invalid token)
+        this._permanentlyFailed = true;
+      }
+
       (this.handlers.get(msg.type) ?? []).forEach(h => h(msg));
       (this.handlers.get('*') ?? []).forEach(h => h(msg));
     } catch { /* ignore parse errors */ }
@@ -81,7 +92,10 @@ export class WebSocketClient {
     this._isAuthenticated = false;
     this._clearPing();
     (this.handlers.get('disconnected') ?? []).forEach(h => h({ type: 'disconnected' }));
-    this._scheduleReconnect();
+    // Only reconnect for transient disconnects, not permanent failures or intentional stops
+    if (!this._permanentlyFailed && !this._stopped) {
+      this._scheduleReconnect();
+    }
   }
 
   private _scheduleReconnect(): void {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WebSocketClient } from './utils/WebSocketClient';
 import { MobileHome } from './screens/MobileHome';
 import { MobileChat } from './screens/MobileChat';
@@ -10,6 +10,14 @@ export default function App() {
   const [error, setError] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [client, setClient] = useState<WebSocketClient | null>(null);
+  const [reconnectCount, setReconnectCount] = useState(0);
+
+  // Ref so event handlers always read the current screen without stale closure
+  const screenRef = useRef<Screen>('connecting');
+  const setScreenSynced = (s: Screen) => {
+    screenRef.current = s;
+    setScreen(s);
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -17,7 +25,7 @@ export default function App() {
 
     if (!token) {
       setError('No token found. Please scan the QR code from Labonair Bridge settings.');
-      setScreen('error');
+      setScreenSynced('error');
       return;
     }
 
@@ -26,13 +34,21 @@ export default function App() {
     const host = window.location.host;
     const ws = new WebSocketClient(host, token);
 
-    ws.on('auth_success', () => setScreen('home'));
-    ws.on('auth_failed', (msg) => {
-      setError(`Authentication failed: ${msg.reason as string}`);
-      setScreen('error');
+    ws.on('auth_success', () => {
+      setScreenSynced('home');
     });
+
+    ws.on('auth_failed', (msg) => {
+      setError(`Authentication failed: ${(msg.reason as string) ?? 'Invalid token. Try rotating the token in Labonair Bridge settings and re-scanning the QR code.'}`);
+      setScreenSynced('error');
+    });
+
     ws.on('disconnected', () => {
-      if (screen !== 'error') { setScreen('connecting'); }
+      // Only go back to "connecting" if we weren't already in an error or stable state
+      if (screenRef.current === 'connecting' || screenRef.current === 'home') {
+        setScreenSynced('connecting');
+        setReconnectCount(c => c + 1);
+      }
     });
 
     ws.connect();
@@ -43,12 +59,12 @@ export default function App() {
 
   const openSession = (id: string) => {
     setSessionId(id);
-    setScreen('chat');
+    setScreenSynced('chat');
   };
 
   const goHome = () => {
     setSessionId(null);
-    setScreen('home');
+    setScreenSynced('home');
   };
 
   if (screen === 'error') {
@@ -85,7 +101,14 @@ export default function App() {
         background: '#1a1a2e', color: '#fff', flexDirection: 'column', gap: 16,
       }}>
         <div style={{ fontSize: 36 }}>⚡</div>
-        <div style={{ fontSize: 15, opacity: 0.6 }}>Connecting to Labonair Bridge…</div>
+        <div style={{ fontSize: 15, opacity: 0.6 }}>
+          {reconnectCount > 0 ? `Reconnecting… (attempt ${reconnectCount + 1})` : 'Connecting to Labonair Bridge…'}
+        </div>
+        {reconnectCount > 2 && (
+          <div style={{ fontSize: 12, opacity: 0.4, maxWidth: 260, textAlign: 'center', lineHeight: 1.5 }}>
+            Make sure Bridge is enabled in Labonair settings and you're on the same Wi-Fi network.
+          </div>
+        )}
       </div>
     );
   }
