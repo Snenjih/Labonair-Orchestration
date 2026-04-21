@@ -4,6 +4,10 @@
   "description": "Mission Control for Claude Code CLI — session management, webview chat, and background agent persistence.",
   "version": "0.0.1",
   "publisher": "labonair",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Snenjih/Labonair-Orchestration.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
